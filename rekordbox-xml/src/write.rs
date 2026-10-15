@@ -25,7 +25,7 @@ fn esc(s: &str) -> String {
     o
 }
 
-/// `/home/me/a b.mp3` → `file://localhost/home/me/a%20b.mp3` (UTF-8 bytes percent-encoded, `/` and `:` kept);
+/// `/home/user/a b.mp3` → `file://localhost/home/user/a%20b.mp3` (UTF-8 bytes percent-encoded, `/` and `:` kept);
 /// a drive path `C:/x` gets the URI's leading slash.
 fn uri(path: &Path) -> String {
     let p = path.to_string_lossy().replace('\\', "/");

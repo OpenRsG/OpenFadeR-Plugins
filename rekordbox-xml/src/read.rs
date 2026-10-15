@@ -1,9 +1,9 @@
 //! `RekordboxXml`: the reader and its [`Source`] impl (evidence: see the crate docs).
 
 use openfader_plugin::library::{
-    Analysis, Beat, Cue, Playlist, PlaylistRow, Source, Track, playlist_tree,
+    playlist_tree, Analysis, Beat, Cue, Playlist, PlaylistRow, Source, Track,
 };
-use rekordbox_common::{Edge, PathMap, at, location, tags};
+use rekordbox_common::{at, location, tags, Edge, PathMap};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
@@ -231,7 +231,7 @@ mod tests {
   <PRODUCT Name="rekordbox" Version="7.0.0" Company="AlphaTheta"/>
   <COLLECTION Entries="4">
     <TRACK TrackID="1" Name="Zed &amp; Co" Artist="A" Genre="House" Tonality="8A" AverageBpm="128.00" TotalTime="300"
-           Location="file://localhost/home/me/Music/Zed%20%26%20Co%20%C3%A9.mp3" Rating="255" Comments="top" DateAdded="2026-01-02"
+           Location="file://localhost/home/user/Music/Zed%20%26%20Co%20%C3%A9.mp3" Rating="255" Comments="top" DateAdded="2026-01-02"
            BitRate="320" SampleRate="44100">
       <TEMPO Inizio="0.025" Bpm="128.00" Metro="4/4" Battito="1"/>
       <POSITION_MARK Name="" Type="0" Start="1.5" Num="0"/>
@@ -245,7 +245,7 @@ mod tests {
       <NODE Type="1" Name="Loose" KeyType="0" Entries="2"><TRACK Key="3"/><TRACK Key="1"/></NODE>
       <NODE Type="0" Name="Packs" Count="2">
         <NODE Type="1" Name="By location" KeyType="1" Entries="2">
-          <TRACK Key="file://localhost/tmp/u.wav"/><TRACK Key="file://localhost/home/me/Music/Zed%20%26%20Co%20%C3%A9.mp3"/>
+          <TRACK Key="file://localhost/tmp/u.wav"/><TRACK Key="file://localhost/home/user/Music/Zed%20%26%20Co%20%C3%A9.mp3"/>
         </NODE>
         <NODE Type="0" Name="Empty folder" Count="0"/>
       </NODE>
@@ -277,7 +277,7 @@ mod tests {
         // Percent-encoding (incl. UTF-8 and `%26`) is decoded and `file://localhost` dropped.
         assert_eq!(
             zed.file.as_deref(),
-            Some(Path::new("/home/me/Music/Zed & Co é.mp3"))
+            Some(Path::new("/home/user/Music/Zed & Co é.mp3"))
         );
         assert_eq!(
             (
@@ -356,12 +356,10 @@ mod tests {
         std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
 
         let p = write("c", "<html><body/></html>");
-        assert!(
-            RekordboxXml::open(&p, &Vec::new())
-                .err()
-                .unwrap()
-                .contains("DJ_PLAYLISTS")
-        );
+        assert!(RekordboxXml::open(&p, &Vec::new())
+            .err()
+            .unwrap()
+            .contains("DJ_PLAYLISTS"));
         std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
     }
 }

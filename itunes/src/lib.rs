@@ -11,9 +11,9 @@
 //! rekordbox Label", X02).
 
 use openfader_plugin::library::{
-    LibraryPlugin, Playlist, PlaylistRow, Probe, Source, Track, playlist_tree,
+    playlist_tree, LibraryPlugin, Playlist, PlaylistRow, Probe, Source, Track,
 };
-use rekordbox_common::{Edge, PathMap, Tag, at, location, path_map, tags};
+use rekordbox_common::{at, location, path_map, tags, Edge, PathMap, Tag};
 use serde_json::Value as Json;
 use std::collections::HashMap;
 use std::io::Read;
@@ -277,10 +277,10 @@ mod tests {
 <key>Tracks</key><dict>
  <key>20</key><dict><key>Track ID</key><integer>20</integer><key>Name</key><string>B &amp; B</string><key>Artist</key><string>Band</string>
   <key>Total Time</key><integer>200400</integer><key>BPM</key><integer>128</integer><key>Rating</key><integer>80</integer><key>Grouping</key><string>Lbl</string>
-  <key>Date Added</key><date>2015-04-03T10:20:30Z</date><key>Location</key><string>file://localhost/Users/me/Music/a%20b.mp3</string></dict>
+  <key>Date Added</key><date>2015-04-03T10:20:30Z</date><key>Location</key><string>file://localhost/Users/user/Music/a%20b.mp3</string></dict>
  <key>10</key><dict><key>Track ID</key><integer>10</integer><key>Name</key><string>Cloud</string></dict>
  <key>11</key><dict><key>Track ID</key><integer>11</integer><key>Name</key><string>Second</string><key>Comments</key><string></string>
-  <key>Location</key><string>file://localhost/Users/me/Music/c.flac</string></dict>
+  <key>Location</key><string>file://localhost/Users/user/Music/c.flac</string></dict>
 </dict>
 <key>Playlists</key><array>
  <dict><key>Name</key><string>Library</string><key>Master</key><true/><key>Playlist Persistent ID</key><string>M</string></dict>
@@ -312,7 +312,7 @@ mod tests {
         );
         assert_eq!(
             t.file.as_deref(),
-            Some(Path::new("/Users/me/Music/a b.mp3"))
+            Some(Path::new("/Users/user/Music/a b.mp3"))
         );
 
         let tree = lib.playlists().unwrap();

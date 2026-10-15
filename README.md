@@ -15,7 +15,12 @@ Plugins for [OpenFadeR](https://github.com/OpenRsG/OpenFadeR): one folder per pl
 | `now-playing` | events, actions, settings (Python) |
 | `yt-dlp` | track sources: YouTube / SoundCloud search, playlists and downloads (Python, needs `yt-dlp`) |
 
-## Build and install
+## Install
+
+In the app: PREFERENCES > EXTENSIONS > GET PLUGINS lists every plugin of this repository (it is there by default); INSTALL
+installs one, INSTALL ALL all of them. Native plugins come prebuilt from this repository's latest release.
+
+## Build from source
 
 The native plugins are Rust crates of one Cargo workspace built against the SDK of the core repository, found at `../../sdk`:
 check this repository out as `extension/plugin/` inside a core checkout (the core's `start.sh` does it), then
@@ -28,6 +33,12 @@ The app finds `extension/plugin/` next to its binary. Elsewhere, copy a plugin f
 `~/.config/openfader/extension/plugin/`, drop it on the app window, or list folders in `OPENFADER_PLUGINS`. Keys of encrypted
 libraries are plugin settings (PREFERENCES > EXTENSIONS), never environment variables. The plugin format and the library / device
 ABI are documented in the core repository's `docs/plugins.md` and `sdk/README.md`.
+
+## Releases
+
+Pushing a tag `v*` makes CI build the native plugins on Linux, Windows and macOS and attach one
+`<plugin>-<os>-<arch>.zip` per plugin to the release (`<os>`: `linux`, `windows`, `macos`; `<arch>`: `x86_64`, `aarch64`), each
+holding the library file the plugin's `plugin.json` names. `package.py` makes them locally after `build.sh`.
 
 ## License
 
