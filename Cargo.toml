@@ -1,0 +1,20 @@
+[workspace]
+resolver = "2"
+members = ["rekordbox-common", "rekordbox-export", "rekordbox-device", "rekordbox-db", "rekordbox-xml", "itunes", "sample-pack"]
+
+[workspace.dependencies]
+openfader-plugin = { path = "../../sdk", features = ["library"] }
+rekordbox-common = { path = "rekordbox-common" }
+rekordbox-export = { path = "rekordbox-export" }
+serde_json = "1"
+# Each database plugin carries its own SQLCipher (the host links plain SQLite).
+rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+# The SDK catches panics at the C ABI (catch_unwind): this MUST stay "unwind", "abort" would kill the host.
+panic = "unwind"

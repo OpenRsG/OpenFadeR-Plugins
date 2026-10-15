@@ -1,0 +1,91 @@
+{
+  "name": "lever-fx",
+  "version": "0.2.0",
+  "description": "Lever effects of the Pioneer DJ RMX-IGNITE: ECHO, REVERB, JUGGLE, REVERSE, SOLO, STRETCH. The lever is `knob` (0 at rest to 1); at rest every effect hands the master back bit for bit. Built from the host's DSP blocks, no code.",
+  "effects": [
+    {
+      "name": "ECHO",
+      "slot": "lever",
+      "chain": [
+        {
+          "block": "echo",
+          "time": "period",
+          "feedback": "0.3 + 0.5 * knob",
+          "damp": 4000,
+          "mix": "knob * g"
+        }
+      ]
+    },
+    {
+      "name": "REVERB",
+      "slot": "lever",
+      "chain": [
+        {
+          "block": "reverb",
+          "size": 0.85,
+          "mix": "knob * g"
+        }
+      ]
+    },
+    {
+      "name": "JUGGLE",
+      "slot": "lever",
+      "chain": [
+        {
+          "block": "slice",
+          "time": "period",
+          "count": "4 * exp2(floor(clamp(knob * 3.99, 0, 3)))"
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "REVERSE",
+      "slot": "lever",
+      "chain": [
+        {
+          "block": "reverse",
+          "time": "period"
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "SOLO",
+      "slot": "lever",
+      "chain": [
+        {
+          "block": "filter",
+          "type": "bp",
+          "hz": 1000,
+          "q": "0.7 + 12 * knob"
+        },
+        {
+          "block": "gain",
+          "gain": "1 + knob"
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "STRETCH",
+      "slot": "lever",
+      "chain": [
+        {
+          "block": "tape",
+          "speed": "1 - 0.75 * knob",
+          "max": 2
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    }
+  ]
+}

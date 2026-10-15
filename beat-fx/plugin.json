@@ -1,0 +1,135 @@
+{
+  "name": "beat-fx",
+  "version": "0.2.0",
+  "description": "Beat FX of Pioneer DJ's rekordbox and DJM mixers that the built-in nine lack: PING PONG, SPIRAL, TRIPLET ROLL, TRIPLET LPF / HPF (TRIPLET FILTER), HELIX, MOBIUS. Classic designs built from the host's DSP blocks, no code.",
+  "effects": [
+    {
+      "name": "PING PONG",
+      "slot": "beat",
+      "chain": [
+        {
+          "block": "echo",
+          "pingpong": true,
+          "time": "period",
+          "feedback": 0.5
+        }
+      ]
+    },
+    {
+      "name": "SPIRAL",
+      "slot": "beat",
+      "lfo": [
+        {
+          "name": "swirl",
+          "period": 3,
+          "shape": "sine"
+        }
+      ],
+      "chain": [
+        {
+          "block": "echo",
+          "time": "period + 0.3ms * swirl",
+          "feedback": 0.6,
+          "damp": 3000,
+          "loop": [
+            {
+              "block": "allpass",
+              "time": "5.1ms",
+              "spread": 0.07
+            },
+            {
+              "block": "allpass",
+              "time": "11.3ms",
+              "spread": 0.07
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "TRIPLET ROLL",
+      "slot": "beat",
+      "chain": [
+        {
+          "block": "loop",
+          "time": "period * 2 / 3"
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "TRIPLET LPF",
+      "slot": "beat",
+      "lfo": [
+        {
+          "name": "m",
+          "period": "period * 2 / 3",
+          "shape": "sweep"
+        }
+      ],
+      "chain": [
+        {
+          "block": "filter",
+          "type": "lp",
+          "hz": "expo(18k, 150, m)",
+          "q": 2
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "TRIPLET HPF",
+      "slot": "beat",
+      "lfo": [
+        {
+          "name": "m",
+          "period": "period * 2 / 3",
+          "shape": "sweep"
+        }
+      ],
+      "chain": [
+        {
+          "block": "filter",
+          "type": "hp",
+          "hz": "expo(30, 8k, m)",
+          "q": 2
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "HELIX",
+      "slot": "beat",
+      "chain": [
+        {
+          "block": "loop",
+          "time": "period",
+          "climb": 1,
+          "steps": 12
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "MOBIUS",
+      "slot": "beat",
+      "chain": [
+        {
+          "block": "shepard",
+          "period": "period"
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    }
+  ]
+}

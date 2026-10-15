@@ -1,0 +1,122 @@
+{
+  "name": "tutorial-fx",
+  "version": "0.1.0",
+  "description": "Examples of JSON-only effects (no code, no compiling): JET SWEEP, DEEP PHASER, TRANCE GATE and LO-FI for the Beat FX selector, DUB SIREN for the SEND FX. Copy this folder and change the numbers; the block reference is docs/plugins.md.",
+  "effects": [
+    {
+      "name": "JET SWEEP",
+      "slot": "beat",
+      "lfo": [
+        {
+          "name": "sweep",
+          "period": "period",
+          "shape": "sweep"
+        }
+      ],
+      "chain": [
+        {
+          "block": "gain",
+          "gain": "g"
+        },
+        {
+          "block": "delay",
+          "time": "1ms + 4ms * sweep",
+          "feedback": 0.6,
+          "max": 0.05
+        },
+        {
+          "block": "mix",
+          "mode": "add",
+          "amount": "level"
+        }
+      ]
+    },
+    {
+      "name": "DEEP PHASER",
+      "slot": "beat",
+      "lfo": [
+        {
+          "name": "sweep",
+          "period": "period * 2",
+          "shape": "sweep"
+        }
+      ],
+      "chain": [
+        {
+          "block": "phaser",
+          "stages": 8,
+          "hz": "expo(200, 4k, sweep)",
+          "feedback": 0.7
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "TRANCE GATE",
+      "slot": "beat",
+      "lfo": [
+        {
+          "name": "chop",
+          "period": "period / 2",
+          "shape": "square"
+        }
+      ],
+      "chain": [
+        {
+          "block": "gain",
+          "gain": "chop",
+          "smooth": 0.003
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "LO-FI",
+      "slot": "beat",
+      "chain": [
+        {
+          "block": "bitcrush",
+          "bits": 6,
+          "hz": "8k"
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "DUB SIREN",
+      "slot": "send",
+      "lfo": [
+        {
+          "name": "sweep",
+          "period": "period * 4",
+          "shape": "tri"
+        }
+      ],
+      "chain": [
+        {
+          "block": "echo",
+          "dry": false,
+          "time": "period / 2 + (0.05 + 0.15 * knob) * sweep",
+          "feedback": "0.5 + 0.35 * knob",
+          "loop": [
+            {
+              "block": "filter",
+              "type": "bp",
+              "hz": "expo(400, 3k, sweep)",
+              "q": 3
+            },
+            {
+              "block": "saturate"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

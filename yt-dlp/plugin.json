@@ -1,0 +1,46 @@
+{
+ "name": "yt-dlp",
+ "version": "1.1.0",
+ "author": "OpenFadeR",
+ "homepage": "https://github.com/yt-dlp/yt-dlp",
+ "description": "YouTube and SoundCloud: search, playlists and downloads through the yt-dlp program",
+ "script": "main.py",
+ "settings": [
+  {
+   "id": "results",
+   "label": "Results per search or playlist",
+   "type": "number",
+   "default": 25
+  },
+  {
+   "id": "format",
+   "label": "Download format",
+   "type": "choice",
+   "choices": [
+    "m4a",
+    "mp3",
+    "best"
+   ],
+   "help": "mp3 needs ffmpeg"
+  }
+ ],
+ "sources": [
+  {
+   "id": "youtube",
+   "name": "YouTube",
+   "search": true
+  },
+  {
+   "id": "soundcloud",
+   "name": "SoundCloud",
+   "search": true
+  }
+ ],
+ "actions": [
+  {
+   "id": "download",
+   "label": "Download from URL…",
+   "input": "Address of a YouTube or SoundCloud track or playlist"
+  }
+ ]
+}

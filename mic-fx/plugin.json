@@ -1,0 +1,77 @@
+{
+  "name": "mic-fx",
+  "version": "0.2.0",
+  "description": "Mic FX of the Pioneer DJ DJM-A9: ECHO, PITCH, MEGAPHONE, REVERB. KNOB is each effect's parameter. Classic designs built from the host's DSP blocks, no code.",
+  "effects": [
+    {
+      "name": "ECHO",
+      "slot": "mic",
+      "chain": [
+        {
+          "block": "echo",
+          "time": "0.1 + 0.7 * knob",
+          "feedback": 0.45,
+          "damp": 3500,
+          "max": 0.9
+        }
+      ]
+    },
+    {
+      "name": "PITCH",
+      "slot": "mic",
+      "chain": [
+        {
+          "block": "pitch",
+          "semitones": "(knob - 0.5) * 24",
+          "window": 0.05,
+          "dead": 0.24
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "MEGAPHONE",
+      "slot": "mic",
+      "chain": [
+        {
+          "block": "filter",
+          "type": "hp",
+          "hz": 500
+        },
+        {
+          "block": "filter",
+          "type": "lp",
+          "hz": 3000
+        },
+        {
+          "block": "saturate",
+          "drive": "1 + 9 * knob"
+        },
+        {
+          "block": "gain",
+          "gain": "1 / sqrt(1 + 9 * knob)"
+        },
+        {
+          "block": "filter",
+          "type": "lp",
+          "hz": 3000
+        },
+        {
+          "block": "mix"
+        }
+      ]
+    },
+    {
+      "name": "REVERB",
+      "slot": "mic",
+      "chain": [
+        {
+          "block": "reverb",
+          "size": "0.3 + 0.6 * knob"
+        }
+      ]
+    }
+  ]
+}

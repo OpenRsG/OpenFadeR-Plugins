@@ -1,0 +1,18 @@
+{
+  "youtube": [
+    {
+      "id": "https://www.youtube.com/playlist?list=PLFgquLnL59alCl_2TQvOiD5Vgm1hCaGSI",
+      "name": "Popular Music Videos"
+    }
+  ],
+  "soundcloud": [
+    {
+      "id": "https://soundcloud.com/diplo/tracks",
+      "name": "Diplo"
+    },
+    {
+      "id": "https://soundcloud.com/majorlazer/tracks",
+      "name": "Major Lazer"
+    }
+  ]
+}

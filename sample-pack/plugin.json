@@ -1,0 +1,17 @@
+{
+  "name": "sample-pack",
+  "version": "0.1.0",
+  "description": "Sampler packs (.spp): a zip of audio files and a sampler_pack.xml listing the samples, their BPM and the pack's lists.",
+  "library": {
+    "lib": {
+      "linux": "libsample_pack.so",
+      "windows": "sample_pack.dll",
+      "macos": "libsample_pack.dylib"
+    },
+    "formats": [
+      "spp"
+    ],
+    "collection_reader": "Import Sample Pack…",
+    "samples": true
+  }
+}

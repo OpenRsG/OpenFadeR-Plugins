@@ -1,0 +1,154 @@
+{
+  "name": "send-fx",
+  "version": "0.2.0",
+  "description": "Send FX of the Pioneer DJ DJM-V5: SHORT DELAY, REVERB, SHIMMER, TAPE ECHO, PING PONG, ECHO-VERB. A send effect outputs only its return (no dry signal). Classic designs built from the host's DSP blocks, no code.",
+  "effects": [
+    {
+      "name": "SHORT DELAY",
+      "slot": "send",
+      "chain": [
+        {
+          "block": "echo",
+          "dry": false,
+          "time": "0.04 + 0.11 * knob",
+          "feedback": 0.25,
+          "damp": 4000,
+          "max": 0.2
+        }
+      ]
+    },
+    {
+      "name": "REVERB",
+      "slot": "send",
+      "chain": [
+        {
+          "block": "reverb",
+          "dry": false,
+          "size": "0.3 + 0.6 * knob"
+        }
+      ]
+    },
+    {
+      "name": "SHIMMER",
+      "slot": "send",
+      "chain": [
+        {
+          "block": "gain",
+          "gain": "g"
+        },
+        {
+          "block": "feedback",
+          "gain": "0.5 * (1 - (0.7 + 0.28 * (0.3 + 0.6 * knob)))",
+          "chain": [
+            {
+              "block": "freeverb",
+              "size": "0.3 + 0.6 * knob"
+            }
+          ],
+          "loop": [
+            {
+              "block": "pitch",
+              "semitones": 12,
+              "window": 0.05,
+              "dead": 0
+            },
+            {
+              "block": "saturate"
+            }
+          ]
+        },
+        {
+          "block": "gain",
+          "gain": "level"
+        }
+      ]
+    },
+    {
+      "name": "TAPE ECHO",
+      "slot": "send",
+      "lfo": [
+        {
+          "name": "wow",
+          "hz": 0.8,
+          "shape": "sine"
+        },
+        {
+          "name": "flutter",
+          "hz": 7,
+          "shape": "sine"
+        }
+      ],
+      "chain": [
+        {
+          "block": "echo",
+          "dry": false,
+          "time": "period + 1.5ms * wow + 0.1ms * flutter",
+          "feedback": "0.2 + 0.65 * knob",
+          "damp": 3000,
+          "loop": [
+            {
+              "block": "saturate",
+              "drive": 2
+            },
+            {
+              "block": "gain",
+              "gain": 0.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "PING PONG",
+      "slot": "send",
+      "chain": [
+        {
+          "block": "echo",
+          "dry": false,
+          "pingpong": true,
+          "time": "period",
+          "feedback": "0.2 + 0.6 * knob"
+        }
+      ]
+    },
+    {
+      "name": "ECHO-VERB",
+      "slot": "send",
+      "chain": [
+        {
+          "block": "echo",
+          "dry": false,
+          "mix": 1,
+          "time": "period",
+          "feedback": 0.5,
+          "damp": 3500
+        },
+        {
+          "block": "parallel",
+          "branches": [
+            [
+              {
+                "block": "gain",
+                "gain": 0.8
+              }
+            ],
+            [
+              {
+                "block": "freeverb",
+                "size": "0.3 + 0.6 * knob"
+              },
+              {
+                "block": "gain",
+                "gain": 0.4
+              }
+            ]
+          ]
+        },
+        {
+          "block": "gain",
+          "gain": "level"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+/target/
+/*/*.so
+/*/*.dll
+/*/*.dylib
+__pycache__/

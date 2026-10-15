@@ -1,0 +1,51 @@
+{
+  "name": "mix-log",
+  "version": "1.0.0",
+  "author": "OpenFadeR",
+  "description": "Keeps a log of every mix: each track that stayed on air, with time, deck, BPM and key, one file per day (CSV or text). Written in Lua, runs inside the app.",
+  "script": "main.lua",
+  "events": [
+    "deck_play",
+    "track_played"
+  ],
+  "actions": [
+    {
+      "id": "open",
+      "label": "Open today's mix log"
+    },
+    {
+      "id": "count",
+      "label": "How many tracks today?"
+    }
+  ],
+  "settings": [
+    {
+      "id": "folder",
+      "label": "Folder",
+      "type": "text",
+      "default": "",
+      "help": "Empty = <data dir>/openfader/plugins/mix-log"
+    },
+    {
+      "id": "format",
+      "label": "File format",
+      "type": "choice",
+      "choices": [
+        "csv",
+        "txt"
+      ]
+    },
+    {
+      "id": "details",
+      "label": "Write BPM and key",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "id": "announce",
+      "label": "Toast each logged track",
+      "type": "bool",
+      "default": false
+    }
+  ]
+}
