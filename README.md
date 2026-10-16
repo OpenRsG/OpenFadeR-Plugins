@@ -20,10 +20,10 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 |---|---|
 | `rekordbox-xml` | library: reads and writes a rekordbox XML collection |
 | `rekordbox-device` | library + device: rekordbox Device Library (`export.pdb`, ANLZ files; rekordbox 5 to 7, every CDJ / XDJ) and OneLibrary (`exportLibrary.db`, built-in key; rekordbox 7 and the newest players, a device option), on USB sticks and SD cards: read, export, update, remove, convert, player settings, backups |
-| `engine-dj` | device: Engine DJ library (`Engine Library/Database2/m.db`: tracks, grid, hot cues, loops, waveform overview, playlists) for Denon DJ, Numark and RANE players and Engine DJ; a new library is schema 3.0.0 (Engine 4.1 and newer) or 2.18.0 (Engine 2.0 to 4.0.1, device option), an existing one of schema 2.18.0 to 3.0.2 is extended as it is |
-| `serato` | device: Serato DJ library (`_Serato_/database V2`, crates; cues, loops, colour and grid in the audio tags; a private copy only when the tags do not fit the shared file) |
-| `virtualdj` | device: VirtualDJ drive database (`VirtualDJ/database.xml`: tags, grid, hot cues, memory cues, loops; lists in `VirtualDJ/MyLists`) |
-| `traktor` | device: Traktor collection (`Traktor/collection.nml`, NML 19: tags, grid, hot and memory cues, loops, playlists), merged into an existing one, for Traktor's Import another Collection |
+| `engine-dj` | library + device: Engine DJ library (`Engine Library/Database2/m.db`: tracks, grid, hot cues, loops, waveform overview, playlists) for Denon DJ, Numark and RANE players and Engine DJ; reads the desktop or a stick's library (schema 2.18.0 to 3.x); a new library is schema 3.0.0 (Engine 4.1 and newer) or 2.18.0 (Engine 2.0 to 4.0.1, device option), an existing one of schema 2.18.0 to 3.0.2 is extended as it is |
+| `serato` | library + device: Serato DJ library (`_Serato_/database V2`, crates; cues, loops, colour and grid in the audio tags; a private copy only when the tags do not fit the shared file); reads `~/Music/_Serato_` or a stick's |
+| `virtualdj` | library + device: VirtualDJ database (`database.xml`: tags, grid, hot cues, memory cues, loops; lists in `MyLists`); reads the desktop or a drive's |
+| `traktor` | library + device: Traktor collection (`collection.nml`, NML 19: tags, grid, hot and memory cues, loops, playlists); reads the desktop collection or a stick's, and merges into an existing one for Traktor's Import another Collection |
 | `rekordbox-db` | library: the rekordbox desktop collection (`master.db`, smart playlists; key and path map as settings) |
 | `itunes` | library: an iTunes / Music `Library.xml` |
 | `sample-pack` | library: sampler packs (`.spp`) |

@@ -31,7 +31,7 @@ mod write;
 
 pub use read::RekordboxXml;
 
-use openfader_plugin::library::{LibraryPlugin, Probe, Snapshot, Source};
+use openfader_plugin::library::{Capabilities, LibraryPlugin, Probe, Snapshot, Source};
 use serde_json::Value;
 use std::io::Read;
 use std::path::Path;
@@ -79,6 +79,17 @@ impl LibraryPlugin for RekordboxXmlPlugin {
             .and_then(Value::as_bool)
             .unwrap_or(true);
         write::write(path, snapshot, grid)
+    }
+
+    /// Evidence: the spec's `POSITION_MARK Num` is -1 (memory) or 0 to 7 (hot cue), so eight hot cue slots; TEMPO elements
+    /// carry tempo changes; a track's `Rating` runs 0 to 255 in steps of 51 (five stars); the file is written whole from the
+    /// snapshot, so it can rewrite an existing library.
+    fn capabilities(_settings: &Value) -> Capabilities {
+        Capabilities {
+            hot_cues: Some(8),
+            write_back: true,
+            ..Capabilities::default()
+        }
     }
 }
 

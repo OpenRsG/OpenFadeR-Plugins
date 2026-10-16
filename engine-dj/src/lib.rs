@@ -1,6 +1,6 @@
-//! Engine DJ library on a device: `Engine Library/Database2/m.db`, the database Denon DJ (Prime, SC6000, SC Live), Numark and
-//! RANE standalone players and Engine DJ desktop read. Write only (`probe` and `open` answer nothing); `export` merges the
-//! snapshot into the library of the device and makes one when there is none.
+//! Engine DJ library: `Engine Library/Database2/m.db`, the database Denon DJ (Prime, SC6000, SC Live), Numark and RANE standalone
+//! players and Engine DJ desktop read. `probe` and `open` read it (desktop `~/Music/Engine Library` or a device, [`reader`]);
+//! `export` merges the snapshot into the library of the device and makes one when there is none.
 //!
 //! # What is written where
 //!
@@ -76,6 +76,7 @@
 pub mod blob;
 pub mod perf;
 pub mod playlists;
+pub mod reader;
 pub mod schema;
 pub mod schema_2;
 pub mod tracks;
@@ -101,12 +102,28 @@ pub fn database(root: &Path) -> PathBuf {
 pub struct Plugin;
 
 impl LibraryPlugin for Plugin {
-    fn probe(_path: &Path) -> Option<Probe> {
-        None
+    fn probe(path: &Path) -> Option<Probe> {
+        reader::probe(path)
     }
 
-    fn open(_path: &Path, _settings: &Value) -> Result<Box<dyn Source>, String> {
-        Err("the Engine DJ plugin reads no library, it only writes one to a device".into())
+    fn open(path: &Path, _settings: &Value) -> Result<Box<dyn Source>, String> {
+        reader::open(path)
+    }
+
+    /// Evidence (the export's note): eight hot cues, eight loops; a loop is a cue with an end. Memory cues are not limited here:
+    /// a saved loop is a memory cue, and the writer counts what it drops itself.
+    fn capabilities(_settings: &Value) -> openfader_plugin::library::Capabilities {
+        openfader_plugin::library::Capabilities {
+            hot_cues: Some(8),
+            ..Default::default()
+        }
+    }
+
+    fn analysis_ref(
+        reference: &str,
+        _settings: &Value,
+    ) -> Option<openfader_plugin::library::Analysis> {
+        reader::analysis_ref(reference)
     }
 
     fn device_probe(root: &Path, _settings: &Value) -> Result<DeviceInfo, String> {

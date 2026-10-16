@@ -1,7 +1,7 @@
 {
   "name": "traktor",
   "version": "0.1.0",
-  "description": "Traktor collection (Traktor/collection.nml) on USB sticks: written next to the other libraries and sharing their audio, for Traktor's Import another Collection.",
+  "description": "Traktor collection (collection.nml): read from Traktor's folder or a USB stick, and written on sticks next to the other libraries, sharing their audio, for Traktor's Import another Collection.",
   "library": {
     "lib": {
       "linux": "libtraktor.so",
@@ -9,8 +9,20 @@
       "macos": "libtraktor.dylib"
     },
     "formats": [
-      "dir"
+      "dir",
+      "nml"
     ],
-    "device": true
+    "device": true,
+    "detect": {
+      "linux": [
+        "~/Documents/Native Instruments/Traktor */collection.nml"
+      ],
+      "macos": [
+        "~/Documents/Native Instruments/Traktor */collection.nml"
+      ],
+      "windows": [
+        "%USERPROFILE%/Documents/Native Instruments/Traktor */collection.nml"
+      ]
+    }
   }
 }

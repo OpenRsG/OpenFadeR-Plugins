@@ -274,7 +274,7 @@ fn writes_a_collection_that_reads_back() {
     assert_eq!(loc.get("DIR"), Some("/:Contents/:Art/:Alb/:"));
     assert_eq!(
         (loc.get("VOLUME"), loc.get("VOLUMEID")),
-        (Some("STICK"), Some("STICK"))
+        (Some(volume(&root).as_str()), Some(volume(&root).as_str()))
     );
     assert_eq!(a.child("ALBUM").unwrap().get("TITLE"), Some("Alb"));
     let info = a.child("INFO").unwrap();
@@ -339,7 +339,7 @@ fn writes_a_collection_that_reads_back() {
         (Some("PLAYLIST"), Some("Night"))
     );
     let (ka, kb) = (key_of(a), key_of(b));
-    assert_eq!(ka, "STICK/:Contents/:Art/:Alb/:a.wav");
+    assert_eq!(ka, format!("{}/:Contents/:Art/:Alb/:a.wav", volume(&root)));
     assert_eq!(keys_of(night), [kb.clone(), ka.clone()]);
     assert_eq!(keys_of(&top[1]), [ka]);
     assert_eq!(
@@ -440,7 +440,10 @@ fn foreign_entries_and_playlists_survive_and_ours_are_replaced() {
         (b.get("AUDIO_ID"), b.get("LOCK"), b.get("TITLE")),
         (Some("KEEP"), Some("1"), Some("Beta & Co"))
     );
-    assert_eq!(b.child("LOCATION").unwrap().get("VOLUME"), Some("STICK"));
+    assert_eq!(
+        b.child("LOCATION").unwrap().get("VOLUME"),
+        Some(volume(&root).as_str())
+    );
     assert_eq!(cues_of(b).len(), 1);
     assert_eq!(cues_of(b)[0].2, 777.0);
 
@@ -545,7 +548,8 @@ fn the_device_probe_sees_the_library_it_wrote() {
             .unwrap()
             .can_write
     );
-    assert!(Plugin::probe(&root).is_none() && Plugin::open(&root, &Value::Null).is_err());
+    let nope = root.join("nope");
+    assert!(Plugin::probe(&nope).is_none() && Plugin::open(&nope, &Value::Null).is_err());
 }
 
 #[test]
@@ -555,4 +559,160 @@ fn the_volume_is_the_drive_letter_or_the_mount_folder() {
     assert_eq!(volume(Path::new("E:\\")), "E:");
     assert_eq!(volume(Path::new("e:/")), "E:");
     assert_eq!(volume(Path::new("/")), "USB");
+}
+
+#[test]
+fn the_reader_reads_back_what_the_writer_wrote() {
+    let (root, src) = dirs("reader");
+    run(&root, &snap_ab(&src), &ExportOptions::default(), false).unwrap();
+    let file = root.join(FILE);
+    assert_eq!(
+        Plugin::probe(&root).map(|p| (p.score, p.kind)),
+        Some((70, "Traktor".into()))
+    );
+    assert_eq!(Plugin::probe(&file).map(|p| p.score), Some(95));
+    let txt = src.join("x.txt");
+    std::fs::write(&txt, "hello").unwrap();
+    assert!(Plugin::probe(&txt).is_none() && Plugin::probe(&src).is_none());
+    let bad = src.join("bad.nml");
+    std::fs::write(&bad, "<other/>").unwrap();
+    assert!(Plugin::probe(&bad).is_none());
+
+    for p in [&root, &file] {
+        let s = Plugin::open(p, &Value::Null).unwrap();
+        let all = s.tracks(None).unwrap();
+        assert_eq!(all.len(), 2);
+        let a = all.iter().find(|t| t.title == "Alpha").unwrap();
+        assert_eq!(
+            (
+                a.artist.as_str(),
+                a.album.as_str(),
+                a.genre.as_str(),
+                a.key.as_str()
+            ),
+            ("Art", "Alb", "House", "1m")
+        );
+        assert_eq!(
+            (
+                a.bpm_x100,
+                a.rating,
+                a.bitrate,
+                a.length_s,
+                a.comment.as_str(),
+                a.date_added.as_str()
+            ),
+            (12800, 4, 320, 1, "a < b & \"c\"", "2024-03-05")
+        );
+        assert_eq!(
+            a.file.as_deref(),
+            Some(root.join("Contents/Art/Alb/a.wav").as_path())
+        );
+        assert!(a.file.as_ref().unwrap().is_file());
+
+        let lists = s.playlists().unwrap();
+        let l: Vec<_> = lists
+            .iter()
+            .map(|p| (p.id.as_str(), p.depth, p.is_folder))
+            .collect();
+        assert_eq!(
+            l,
+            [
+                ("Sets", 0, true),
+                ("Sets/Night", 1, false),
+                ("Top", 0, false)
+            ]
+        );
+        let night: Vec<_> = s
+            .tracks(Some("Sets/Night"))
+            .unwrap()
+            .into_iter()
+            .map(|t| t.title)
+            .collect();
+        assert_eq!(night, ["Beta & Co", "Alpha"]);
+        assert_eq!(s.tracks(Some("Top")).unwrap().len(), 1);
+
+        let an = s.analysis(a).unwrap();
+        assert_eq!(an.key.as_deref(), Some("8A"));
+        let bars: Vec<_> = an.beats.iter().map(|b| b.bar_pos).collect();
+        assert_eq!(bars, [3, 4, 1]);
+        for (b, ms) in an.beats.iter().zip([100, 569, 1038]) {
+            assert!(b.time_ms.abs_diff(ms) <= 1 && b.bpm_x100 == 12800, "{b:?}");
+        }
+        let mut cues: Vec<_> = an
+            .cues
+            .iter()
+            .map(|c| (c.hot_cue, c.time_ms, c.loop_end_ms, c.comment.clone()))
+            .collect();
+        cues.sort_by_key(|c| (c.0, c.1));
+        assert_eq!(
+            cues,
+            [
+                (0, 2000, None, None),
+                (0, 30000, Some(34000), None),
+                (1, 1000, None, Some("Drop".into())),
+                (2, 8000, Some(12000), Some("Loop".into())),
+                (3, 5000, None, None),
+            ]
+        );
+        let b = all.iter().find(|t| t.title.starts_with("Beta")).unwrap();
+        assert!(s.analysis(b).is_none());
+    }
+}
+
+#[test]
+fn analysis_ref_needs_no_open_handle() {
+    let (root, src) = dirs("ref");
+    run(&root, &snap_ab(&src), &ExportOptions::default(), false).unwrap();
+    let all = {
+        let s = Plugin::open(&root, &Value::Null).unwrap();
+        s.tracks(None)
+            .unwrap()
+            .into_iter()
+            .map(|t| {
+                let a = s.analysis(&t);
+                (t, a)
+            })
+            .collect::<Vec<_>>()
+    };
+    assert!(all.iter().any(|(_, a)| a.is_some()));
+    for (t, a) in all {
+        let r = Plugin::analysis_ref(t.analysis_ref.as_deref().unwrap(), &Value::Null);
+        assert_eq!(
+            serde_json::to_value(&r).unwrap(),
+            serde_json::to_value(&a).unwrap()
+        );
+    }
+}
+
+#[test]
+fn absurd_tempo_or_length_makes_no_grid() {
+    let entry = |bpm: &str, playtime: &str| {
+        El::new("ENTRY")
+            .with(El::new("TEMPO").attr("BPM", bpm))
+            .with(El::new("INFO").attr("PLAYTIME_FLOAT", playtime))
+            .with(
+                El::new("CUE_V2")
+                    .attr("TYPE", "4")
+                    .attr("START", "1000")
+                    .attr("LEN", "0")
+                    .attr("HOTCUE", "0"),
+            )
+    };
+    assert_eq!(
+        read::entry_analysis(&entry("128", "10"))
+            .unwrap()
+            .beats
+            .len(),
+        22
+    );
+    for (bpm, len) in [
+        ("1e300", "10"),
+        ("128", "1e300"),
+        ("inf", "10"),
+        ("128", "inf"),
+        ("NaN", "10"),
+    ] {
+        let a = read::entry_analysis(&entry(bpm, len));
+        assert!(a.is_none_or(|a| a.beats.is_empty()), "{bpm} {len}");
+    }
 }

@@ -1,8 +1,17 @@
 //! MP3: the ID3v2 tag at the head of the file (<https://github.com/Holzhaus/serato-tags/blob/main/docs/fileformats.md>).
 
-use super::{id3, read_n, Edit, Error, Tags};
+use super::{id3, read_n, Edit, Error, Stored, Tags};
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
+
+/// The Serato objects of the ID3v2 tag at the head of the file.
+pub fn read(f: &mut File) -> Result<Stored, Error> {
+    let Some(total) = id3::total(&read_n(f, 10)?) else {
+        return Ok(Stored::default());
+    };
+    f.seek(SeekFrom::Start(0))?;
+    Ok(id3::parse(&read_n(f, total as u64)?).map_or_else(Stored::default, |t| t.stored()))
+}
 
 pub fn plan(f: &mut File, tags: &Tags, fixed: bool) -> Result<Vec<Edit>, Error> {
     let (mut room, mut old) = (0, None);

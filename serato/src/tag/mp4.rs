@@ -7,7 +7,7 @@
 //! size. A `moov` that has to grow shifts the chunk offsets (`stco`/`co64`) of media behind it.
 
 use super::markers::{field, field_data, Tags, BEATGRID, MARKERS2};
-use super::{read_n, Edit, Error, SLACK};
+use super::{read_n, Edit, Error, Stored, SLACK};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -99,7 +99,8 @@ fn shift(buf: &mut [u8], from: u64, delta: u64) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn plan(f: &mut File, tags: &Tags, fixed: bool) -> Result<Vec<Edit>, Error> {
+/// `(position, size, bytes)` of the `moov` atom.
+fn moov(f: &mut File) -> Result<(u64, u64, Vec<u8>), Error> {
     let len = f.metadata()?.len();
     let (mut pos, mut moov) = (0, None);
     while pos + 8 <= len {
@@ -126,6 +127,28 @@ pub fn plan(f: &mut File, tags: &Tags, fixed: bool) -> Result<Vec<Edit>, Error> 
     if old.len() as u64 != size {
         return Err(Error::Unsupported);
     }
+    Ok((start, size, old))
+}
+
+/// The Serato items of `moov/udta/meta/ilst`.
+pub fn read(f: &mut File) -> Result<Stored, Error> {
+    let (_, _, old) = moov(f)?;
+    let items = find(&old[8..], &[b"udta", b"meta", b"ilst"]).unwrap_or_default();
+    let (mut markers2, mut grid) = (None, None);
+    for (_, s, e) in atoms(items) {
+        match serato(&items[s + 8..e]) {
+            Some((n, v)) if n == "markersv2" => {
+                markers2 = field_data(&String::from_utf8_lossy(v));
+            }
+            Some((n, v)) if n == "beatgrid" => grid = field_data(&String::from_utf8_lossy(v)),
+            _ => {}
+        }
+    }
+    Ok(Stored { markers2, grid })
+}
+
+pub fn plan(f: &mut File, tags: &Tags, fixed: bool) -> Result<Vec<Edit>, Error> {
+    let (start, size, old) = moov(f)?;
     let payload = &old[8..];
 
     let items = find(payload, &[b"udta", b"meta", b"ilst"]).unwrap_or_default();

@@ -60,24 +60,30 @@ impl Style {
     }
 }
 
+/// `file_path` without its drive (`E:` or `/Volumes/NAME`), `/` separated and with the leading `/`; `None` when it has none.
+pub fn drive_rest(file_path: &str) -> Option<String> {
+    let p = file_path.replace('\\', "/");
+    let s = Style::of(&p)?;
+    Some(p[s.prefix.len()..].to_owned())
+}
+
 /// Identity of a file on the drive: the path without the drive name, `/` separated, lower case (FAT is case insensitive).
 pub fn identity(file_path: &str) -> String {
-    let p = file_path.replace('\\', "/");
-    let p = match Style::of(&p) {
-        Some(s) => p[s.prefix.len()..].to_owned(),
-        None => p,
-    };
-    p.to_lowercase()
+    drive_rest(file_path)
+        .unwrap_or_else(|| file_path.replace('\\', "/"))
+        .to_lowercase()
 }
+
+/// Keys by Camelot number 1..=12: `MINOR[n - 1]` is `nA`, `MAJOR[n - 1]` is `nB`.
+const MINOR: [&str; 12] = [
+    "G#m", "D#m", "A#m", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m",
+];
+const MAJOR: [&str; 12] = [
+    "B", "F#", "C#", "G#", "D#", "A#", "F", "C", "G", "D", "A", "E",
+];
 
 /// VirtualDJ's key notation (`Am`, `C#`, sharps only) of a Camelot key (`8A`); any other text is returned as it is.
 pub fn key_text(key: &str) -> String {
-    const MINOR: [&str; 12] = [
-        "G#m", "D#m", "A#m", "Fm", "Cm", "Gm", "Dm", "Am", "Em", "Bm", "F#m", "C#m",
-    ];
-    const MAJOR: [&str; 12] = [
-        "B", "F#", "C#", "G#", "D#", "A#", "F", "C", "G", "D", "A", "E",
-    ];
     let k = key.trim();
     let Some((n, letter)) = k.split_at_checked(k.len().saturating_sub(1)) else {
         return k.to_owned();
@@ -87,6 +93,42 @@ pub fn key_text(key: &str) -> String {
         (Ok(n @ 1..=12), "B" | "b") => MAJOR[n - 1].to_owned(),
         _ => k.to_owned(),
     }
+}
+
+/// Camelot key (`8A`) of a VirtualDJ key (`Am`, `C#`, `Bbm`; a flat is read as its sharp); an existing Camelot key is kept
+/// in upper case; `None` for any other text.
+pub fn camelot(key: &str) -> Option<String> {
+    const SHARP: [&str; 12] = [
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+    ];
+    let k = key.trim();
+    if let Some((n, l)) = k.split_at_checked(k.len().saturating_sub(1))
+        && matches!(n.parse::<u8>(), Ok(1..=12))
+        && matches!(l, "A" | "a" | "B" | "b")
+    {
+        return Some(k.to_uppercase());
+    }
+    let mut it = k.chars();
+    let base = "C D EF G A B".find(it.next()?.to_ascii_uppercase())? as i32;
+    let rest = it.as_str();
+    let (shift, rest) = match rest.chars().next() {
+        Some('#') => (1, &rest[1..]),
+        Some('b') => (-1, &rest[1..]),
+        _ => (0, rest),
+    };
+    let minor = match rest {
+        "" => false,
+        "m" | "min" => true,
+        _ => return None,
+    };
+    let name = format!(
+        "{}{}",
+        SHARP[(base + shift).rem_euclid(12) as usize],
+        if minor { "m" } else { "" }
+    );
+    let table = if minor { &MINOR } else { &MAJOR };
+    let n = table.iter().position(|k| *k == name)? + 1;
+    Some(format!("{n}{}", if minor { 'A' } else { 'B' }))
 }
 
 /// Seconds between two beats at `bpm_x100`.

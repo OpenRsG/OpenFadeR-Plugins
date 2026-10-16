@@ -1,6 +1,6 @@
-//! From the host's [`Analysis`] to what [`crate::blob`] stores: positions in samples, the 8 quick cue and 8 loop slots, the beat
-//! markers, the 1024-point overview waveform and the key id. Conventions (first marker at beat -4, last one past the end,
-//! overview of `1024` points on a multiple of the quantisation number, the stock pad colours) are libdjinterop's
+//! From the host's [`Analysis`] to what [`crate::blob`] stores, and back: positions in samples, the 8 quick cue and 8 loop slots,
+//! the beat markers, the 1024-point overview waveform and the key id. Conventions (first marker at beat -4, last one past the
+//! end, overview of `1024` points on a multiple of the quantisation number, the stock pad colours) are libdjinterop's
 //! (`engine.cpp::normalize_beatgrid`, `track_utils.hpp`, `engine.hpp::standard_pad_colors`).
 
 use crate::blob::{Argb, Loop, Marker, Overview, QuickCue, SLOTS};
@@ -179,4 +179,119 @@ pub fn overview(preview: &[[u8; 3]], total: i64, rate: f64) -> Option<Overview> 
         points,
         samples_per_point,
     })
+}
+
+/// Camelot key ("8A") of Engine's key id; the inverse of [`key_id`]. `None` outside the 24 ids.
+pub fn camelot(id: i64) -> Option<String> {
+    let id = u8::try_from(id).ok().filter(|&i| i < 24)?;
+    let n = (id / 2 + 8) % 12;
+    Some(format!(
+        "{}{}",
+        if n == 0 { 12 } else { n },
+        if id % 2 == 1 { 'A' } else { 'B' }
+    ))
+}
+
+/// Millisecond of a sample offset.
+fn millis(samples: f64, rate: f64) -> u32 {
+    (samples * 1000.0 / rate)
+        .round()
+        .clamp(0.0, f64::from(u32::MAX)) as u32
+}
+
+/// Every beat of a grid, one per marker spacing, from beat number 0 (earlier markers lie before the track) to the last marker;
+/// a beat has the bar position of its number (a downbeat is a multiple of 4) and the tempo of the stretch it starts. `total`
+/// is the sample count: a beat past it is left out (0: no limit). Empty for a grid without two ordered markers.
+pub fn beats_from(grid: &[Marker], rate: f64, total: f64) -> Vec<Beat> {
+    /// A grid that cannot be real (a corrupt one) is not walked beyond this many beats in all.
+    const MAX_BEATS: i64 = 100_000;
+    let mut out = Vec::new();
+    let mut push = |number: i64, offset: f64, bpm: u16| {
+        if offset >= 0.0 && (total <= 0.0 || offset <= total) {
+            out.push(Beat {
+                bar_pos: number.rem_euclid(4) as u16 + 1,
+                bpm_x100: bpm,
+                time_ms: millis(offset, rate),
+            });
+        }
+    };
+    let mut last = None;
+    let mut budget = MAX_BEATS;
+    for w in grid.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let Some(n) = b.number.checked_sub(a.number).filter(|&n| n > 0) else {
+            continue;
+        };
+        let spb = (b.offset - a.offset) / n as f64;
+        if spb.is_nan() || spb <= 0.0 {
+            continue;
+        }
+        let bpm = (6000.0 * rate / spb)
+            .round()
+            .clamp(0.0, f64::from(u16::MAX)) as u16;
+        let walk = n.min(budget);
+        for k in 0..walk {
+            push(a.number.saturating_add(k), a.offset + spb * k as f64, bpm);
+        }
+        budget -= walk;
+        last = Some((b, bpm));
+        if budget == 0 {
+            break;
+        }
+    }
+    if let Some((m, bpm)) = last {
+        push(m.number, m.offset, bpm);
+    }
+    out
+}
+
+/// The cues of a track from its quick cue slots (slot `n` is hot cue `n + 1`), main cue, and loops, positions in samples at
+/// `rate`. The main cue is the memory cue (left out when a hot cue sits there: the writer makes the first hot cue the main cue
+/// when the track has no memory cue). A loop starting where a hot cue does is that cue's loop end, as the writer makes loops
+/// from cues with an end; any other loop is a memory cue with a loop end. Colours are the pad colours (alpha 0: none).
+pub fn cues_from(slots: &[QuickCue], main: f64, loops: &[Option<Loop>], rate: f64) -> Vec<Cue> {
+    let rgb = |c: Argb| (c[0] != 0).then_some([c[1], c[2], c[3]]);
+    let text = |s: &str| (!s.is_empty()).then(|| s.to_owned());
+    let mut cues: Vec<Cue> = slots
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.offset >= 0.0)
+        .map(|(i, s)| Cue {
+            hot_cue: i as u16 + 1,
+            time_ms: millis(s.offset, rate),
+            loop_end_ms: None,
+            color: rgb(s.color),
+            comment: text(&s.label),
+        })
+        .collect();
+    let main_ms = millis(main, rate);
+    if main > 0.0 && !cues.iter().any(|c| c.time_ms == main_ms) {
+        cues.insert(
+            0,
+            Cue {
+                hot_cue: 0,
+                time_ms: main_ms,
+                loop_end_ms: None,
+                color: None,
+                comment: None,
+            },
+        );
+    }
+    for l in loops.iter().flatten() {
+        let (start, end) = (millis(l.start, rate), Some(millis(l.end, rate)));
+        match cues
+            .iter_mut()
+            .find(|c| c.hot_cue > 0 && c.time_ms == start && c.loop_end_ms.is_none())
+        {
+            Some(c) => c.loop_end_ms = end,
+            None => cues.push(Cue {
+                hot_cue: 0,
+                time_ms: start,
+                loop_end_ms: end,
+                color: rgb(l.color),
+                comment: text(&l.label),
+            }),
+        }
+    }
+    cues
 }

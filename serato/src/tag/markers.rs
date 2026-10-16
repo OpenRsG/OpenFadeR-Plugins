@@ -12,7 +12,7 @@
 //! has 8 loop slots); memory cues have no Serato equivalent and are dropped (counted by [`Tags::new`]). A cue colour is
 //! stored as is.
 
-use openfader_plugin::library::{Analysis, Beat};
+use openfader_plugin::library::{Analysis, Beat, Cue};
 
 pub const MARKERS2: &str = "Serato Markers2";
 pub const BEATGRID: &str = "Serato BeatGrid";
@@ -193,6 +193,101 @@ pub fn entries(geob: &[u8]) -> Vec<(String, Vec<u8>)> {
         };
         out.push((name, d.to_vec()));
         pos += 4 + len;
+    }
+    out
+}
+
+/// The cues and loops of `Serato Markers2` GEOB data, in file order: `CUE` entries become hot cues 1..=8 (index + 1), `LOOP`
+/// entries become memory loops (`hot_cue` 0 with a loop end; Serato's loop slots are not hot cue slots). A colour is kept as
+/// stored, an empty name is no comment. Layouts as written by [`Tags::markers2`].
+pub fn cues(markers2: &[u8]) -> Vec<Cue> {
+    let u32_at = |d: &[u8], i: usize| {
+        d.get(i..i + 4)
+            .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+    };
+    let name = |d: &[u8], from: usize| {
+        let n = d.get(from..).unwrap_or_default();
+        let n = &n[..n.iter().position(|&c| c == 0).unwrap_or(n.len())];
+        Some(String::from_utf8_lossy(n).into_owned()).filter(|s| !s.is_empty())
+    };
+    let mut out = Vec::new();
+    for (n, d) in entries(markers2) {
+        match n.as_str() {
+            "CUE" if d.len() >= 12 => out.push(Cue {
+                hot_cue: u16::from(d[1]) + 1,
+                time_ms: u32_at(&d, 2).unwrap_or(0),
+                loop_end_ms: None,
+                color: Some([d[7], d[8], d[9]]),
+                comment: name(&d, 12),
+            }),
+            "LOOP" if d.len() >= 20 => out.push(Cue {
+                hot_cue: 0,
+                time_ms: u32_at(&d, 2).unwrap_or(0),
+                loop_end_ms: u32_at(&d, 6),
+                color: Some([d[15], d[16], d[17]]),
+                comment: name(&d, 20),
+            }),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Most beats a grid is expanded to (about 10 hours at 170 BPM): a damaged marker must not fill the memory.
+const MAX_BEATS: usize = 100_000;
+
+/// The beats of `Serato BeatGrid` data up to `end_ms` (the track length; 0: only the last marker's own beat). Each marker
+/// starts a run of beats: for all but the last the run is the marker's beat count up to the next marker (tempo from the two
+/// times), for the last it runs at the stored BPM. The first marker is beat 1 of its bar and nothing is extrapolated before
+/// it (inferred: Serato's first marker is the grid's first downbeat).
+pub fn grid_beats(grid: &[u8], end_ms: u32) -> Vec<Beat> {
+    let word = |i: usize| grid.get(i..i + 4).map(|b| [b[0], b[1], b[2], b[3]]);
+    let Some(count) = word(2).map(u32::from_be_bytes) else {
+        return vec![];
+    };
+    let marks: Vec<(f64, [u8; 4])> = (0..count as usize)
+        .map_while(|k| {
+            Some((
+                f64::from(f32::from_be_bytes(word(6 + 8 * k)?)),
+                word(10 + 8 * k)?,
+            ))
+        })
+        .collect();
+    let mut out: Vec<Beat> = Vec::new();
+    for (k, &(t, tail)) in marks.iter().enumerate() {
+        let (n, bpm) = match marks.get(k + 1) {
+            Some(&(next, _)) => {
+                let n = u32::from_be_bytes(tail);
+                if n == 0 || next <= t {
+                    continue;
+                }
+                (n as usize, 60.0 * f64::from(n) / (next - t))
+            }
+            None => {
+                let bpm = f64::from(f32::from_be_bytes(tail));
+                if !(bpm > 0.0 && bpm.is_finite()) {
+                    break;
+                }
+                let end = if end_ms > 0 {
+                    f64::from(end_ms)
+                } else {
+                    t * 1000.0
+                };
+                // A beat counts when it starts at most half a millisecond after `end` (the times are rounded to ms).
+                (
+                    ((end - t * 1000.0 + 0.5) * bpm / 60_000.0).floor().max(0.0) as usize + 1,
+                    bpm,
+                )
+            }
+        };
+        let x100 = (bpm * 100.0).round().clamp(0.0, 65535.0) as u16;
+        for i in 0..n.min(MAX_BEATS - out.len().min(MAX_BEATS)) {
+            out.push(Beat {
+                bar_pos: (out.len() % 4) as u16 + 1,
+                bpm_x100: x100,
+                time_ms: ((t + i as f64 * 60.0 / bpm) * 1000.0).round().max(0.0) as u32,
+            });
+        }
     }
     out
 }

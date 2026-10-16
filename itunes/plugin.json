@@ -11,6 +11,11 @@
     "formats": [
       "xml"
     ],
+    "detect": [
+      "~/Music/iTunes/iTunes Music Library.xml",
+      "%USERPROFILE%/Music/iTunes/iTunes Music Library.xml",
+      "~/Music/Music/Media/Music Library.xml"
+    ],
     "collection_reader": "Import from iTunes…",
     "browser": {
       "label": "iTunes",

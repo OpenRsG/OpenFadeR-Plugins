@@ -29,6 +29,7 @@
 
 mod entry;
 mod playlists;
+mod read;
 #[cfg(test)]
 mod tests;
 mod xml;
@@ -54,12 +55,19 @@ const VERSION: u32 = 19;
 pub struct Plugin;
 
 impl LibraryPlugin for Plugin {
-    fn probe(_path: &Path) -> Option<Probe> {
-        None
+    fn probe(path: &Path) -> Option<Probe> {
+        read::probe(path)
     }
 
-    fn open(_path: &Path, _settings: &Value) -> Result<Box<dyn Source>, String> {
-        Err("the Traktor plugin writes a collection and reads no library".into())
+    fn open(path: &Path, _settings: &Value) -> Result<Box<dyn Source>, String> {
+        read::open(path)
+    }
+
+    fn analysis_ref(
+        reference: &str,
+        _settings: &Value,
+    ) -> Option<openfader_plugin::library::Analysis> {
+        read::analysis_ref(reference)
     }
 
     fn device_probe(root: &Path, _settings: &Value) -> Result<DeviceInfo, String> {
@@ -92,6 +100,15 @@ impl LibraryPlugin for Plugin {
         _settings: &Value,
     ) -> Result<ExportReport, String> {
         export(root, snapshot, options)
+    }
+
+    /// Evidence (module doc, Limits): eight hot cue pads, one grid marker per track (no tempo changes).
+    fn capabilities(_settings: &Value) -> openfader_plugin::library::Capabilities {
+        openfader_plugin::library::Capabilities {
+            hot_cues: Some(8),
+            tempo_changes: false,
+            ..Default::default()
+        }
     }
 }
 

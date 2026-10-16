@@ -25,15 +25,20 @@
 //! Limits: the grid is VirtualDJ's constant one (anchor and tempo); `Size` of a loop counts beats (inferred, see [`song`]); lists
 //! hold the path with the drive letter the database uses, VirtualDJ 2024 and later link them to the drive, older versions need
 //! the same letter on the next computer.
+//!
+//! Reading (`read.rs`): `probe` and `open` take a `database.xml`, or a folder that holds `VirtualDJ/database.xml` (a drive root)
+//! or `database.xml` (the `VirtualDJ` folder); the lists come from `MyLists`, `Folders` and `Playlists` next to the database.
+//! A track's audio is looked for below the drive root when its `FilePath` names another drive.
 
 pub mod song;
 pub mod xml;
 
 mod lists;
+mod read;
 
 use openfader_plugin::library::{
-    DeviceInfo, ExportOptions, ExportReport, Feature, LibraryPlugin, Probe, Snapshot, Source,
-    audio_slot, host, place_audio,
+    audio_slot, host, place_audio, DeviceInfo, ExportOptions, ExportReport, Feature, LibraryPlugin,
+    Probe, Snapshot, Source,
 };
 use serde_json::Value;
 use std::collections::HashMap;
@@ -49,12 +54,20 @@ const ROOT: &str = "VirtualDJ_Database";
 pub struct Plugin;
 
 impl LibraryPlugin for Plugin {
-    fn probe(_path: &Path) -> Option<Probe> {
-        None
+    /// A `database.xml` of VirtualDJ, or a folder holding one (a drive root or the `VirtualDJ` folder).
+    fn probe(path: &Path) -> Option<Probe> {
+        read::probe(path)
     }
 
-    fn open(_path: &Path, _settings: &Value) -> Result<Box<dyn Source>, String> {
-        Err("the VirtualDJ plugin reads no library, it only writes devices".into())
+    fn open(path: &Path, _settings: &Value) -> Result<Box<dyn Source>, String> {
+        Ok(Box::new(read::Reader::open(path)?))
+    }
+
+    fn analysis_ref(
+        reference: &str,
+        _settings: &Value,
+    ) -> Option<openfader_plugin::library::Analysis> {
+        read::analysis_ref(reference)
     }
 
     fn device_probe(root: &Path, _settings: &Value) -> Result<DeviceInfo, String> {
@@ -86,6 +99,16 @@ impl LibraryPlugin for Plugin {
         _settings: &Value,
     ) -> Result<ExportReport, String> {
         export(root, snapshot, options)
+    }
+
+    /// Evidence (module doc, Limits): the grid is VirtualDJ's constant one, anchor and tempo; the eight hot cue slots are
+    /// the ones [`song::fill`] writes.
+    fn capabilities(_settings: &Value) -> openfader_plugin::library::Capabilities {
+        openfader_plugin::library::Capabilities {
+            hot_cues: Some(8),
+            tempo_changes: false,
+            ..Default::default()
+        }
     }
 }
 

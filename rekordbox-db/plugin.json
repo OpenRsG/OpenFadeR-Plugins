@@ -11,6 +11,14 @@
     "formats": [
       "db"
     ],
+    "detect": {
+      "windows": [
+        "%APPDATA%/Pioneer/rekordbox/master.db"
+      ],
+      "macos": [
+        "~/Library/Pioneer/rekordbox/master.db"
+      ]
+    },
     "browser": {
       "label": "rekordbox collection",
       "path_setting": "file"

@@ -3,7 +3,7 @@
 //! taking up the difference so the first audio frame stays where it is.
 
 use super::markers::{field, field_data, Tags};
-use super::{Edit, Error, SLACK};
+use super::{Edit, Error, Stored, SLACK};
 use std::fs::File;
 use std::io::Read;
 
@@ -35,7 +35,8 @@ fn named<'a>(c: &'a [u8], name: &str) -> Option<&'a [u8]> {
     k.eq_ignore_ascii_case(name.as_bytes()).then_some(&v[1..])
 }
 
-pub fn plan(f: &mut File, tags: &Tags, fixed: bool) -> Result<Vec<Edit>, Error> {
+/// The metadata blocks `(type, body)` of the file.
+fn blocks(f: &mut File) -> Result<Vec<(u8, Vec<u8>)>, Error> {
     let mut magic = [0; 4];
     f.read_exact(&mut magic)?;
     if &magic != b"fLaC" {
@@ -52,6 +53,29 @@ pub fn plan(f: &mut File, tags: &Tags, fixed: bool) -> Result<Vec<Edit>, Error> 
             break;
         }
     }
+    Ok(blocks)
+}
+
+/// The Serato comments of the VORBIS_COMMENT block.
+pub fn read(f: &mut File) -> Result<Stored, Error> {
+    let blocks = blocks(f)?;
+    let Some((_, b)) = blocks.iter().find(|(t, _)| *t == VORBIS_COMMENT) else {
+        return Ok(Stored::default());
+    };
+    let (_, list) = comments(b).ok_or(Error::Unsupported)?;
+    let get = |name| {
+        list.iter()
+            .find_map(|c| named(c, name))
+            .and_then(|v| field_data(&String::from_utf8_lossy(v)))
+    };
+    Ok(Stored {
+        markers2: get(MARKERS),
+        grid: get(GRID),
+    })
+}
+
+pub fn plan(f: &mut File, tags: &Tags, fixed: bool) -> Result<Vec<Edit>, Error> {
+    let blocks = blocks(f)?;
     let region: usize = blocks.iter().map(|(_, b)| 4 + b.len()).sum();
 
     let old = blocks.iter().find(|(t, _)| *t == VORBIS_COMMENT);

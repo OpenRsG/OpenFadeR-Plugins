@@ -63,6 +63,28 @@ pub fn plan(path: &Path, tags: &Tags, fixed: bool) -> Result<Vec<Edit>, Error> {
     }
 }
 
+/// The data of the two GEOB objects (or their FLAC / MP4 counterparts) Serato keeps in an audio file.
+#[derive(Debug, Default)]
+pub struct Stored {
+    /// `Serato Markers2`: see [`markers::entries`].
+    pub markers2: Option<Vec<u8>>,
+    /// `Serato BeatGrid`.
+    pub grid: Option<Vec<u8>>,
+}
+
+/// What the file at `path` holds (nothing for a file without the tags); `Err` for a container we do not read.
+pub fn read(path: &Path) -> Result<Stored, Error> {
+    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase());
+    let f = &mut File::open(path)?;
+    match ext.as_deref() {
+        Some("mp3") => mp3::read(f),
+        Some("flac") => flac::read(f),
+        Some("wav" | "aif" | "aiff") => riff::read(f),
+        Some("m4a" | "mp4") => mp4::read(f),
+        _ => Err(Error::Unsupported),
+    }
+}
+
 /// Carries out `edits`; `true` when the file changed. Edits of equal length are written in place (only the bytes that differ),
 /// anything else goes through a temporary file that replaces the original.
 pub fn apply(path: &Path, edits: &mut [Edit]) -> Result<bool, Error> {

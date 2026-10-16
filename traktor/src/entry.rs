@@ -81,7 +81,7 @@ pub fn musical_key(s: &str) -> Option<u8> {
 }
 
 /// Open Key text ("10m") of a `MUSICAL_KEY` value.
-fn open_key(v: u8) -> String {
+pub fn open_key(v: u8) -> String {
     let (minor, pc) = (v >= 12, i32::from(v % 12));
     // A minor is 1m and C major 1d; a minor key counts as its relative major, three semitones up.
     let major = if minor { (pc + 3) % 12 } else { pc };

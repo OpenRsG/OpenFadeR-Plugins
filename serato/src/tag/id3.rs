@@ -6,7 +6,7 @@
 //! (a footer's room becomes padding). ID3v2.2 tags cannot be extended with GEOB frames and count as unusable.
 
 use super::markers::{Tags, BEATGRID, MARKERS2};
-use super::{Error, SLACK};
+use super::{Error, Stored, SLACK};
 
 pub struct Frame {
     id: [u8; 4],
@@ -116,6 +116,15 @@ impl Tag {
                     .filter(|(d, _)| *d == desc.as_bytes())
                     .map(|(_, data)| data)
             })
+    }
+
+    /// The Serato objects of the tag.
+    pub fn stored(&self) -> Stored {
+        let get = |d| self.find(d).map(<[u8]>::to_vec);
+        Stored {
+            markers2: get(MARKERS2),
+            grid: get(BEATGRID),
+        }
     }
 }
 

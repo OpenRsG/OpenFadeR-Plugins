@@ -7,7 +7,7 @@
 //! Export merges: the records of other paths (and every other top-level record) stay as they are, the record of a path we write
 //! is replaced where it stands, new paths are appended.
 
-use crate::tlv::{self, rec, text};
+use crate::tlv::{self, rec, text, Rec};
 use openfader_plugin::library::Track;
 use std::collections::HashMap;
 
@@ -82,6 +82,82 @@ pub fn paths(buf: &[u8]) -> Result<Vec<String>, String> {
         .iter()
         .filter(|r| &r.tag == b"otrk")
         .filter_map(|r| path_of(r.data))
+        .collect())
+}
+
+/// A path as `pfil` and `ptrk` hold it, normalised: forward slashes (inferred: a Windows library may hold backslashes) and no
+/// leading slash (a macOS path is absolute without it; the reader finds the drive root it starts at).
+pub fn norm(p: &str) -> String {
+    let p = if p.contains('\\') && !p.contains('/') {
+        p.replace('\\', "/")
+    } else {
+        p.to_string()
+    };
+    p.trim_start_matches('/').to_string()
+}
+
+/// The number at the start of `s` (`320.0kbps`, `44.1k`).
+fn leading_f64(s: &str) -> Option<f64> {
+    let end = s
+        .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .unwrap_or(s.len());
+    s[..end].parse().ok()
+}
+
+/// Seconds of a `mm:ss.xx` (or `h:mm:ss`) length text.
+fn seconds(s: &str) -> i64 {
+    s.split(':')
+        .try_fold(0.0, |a, p| {
+            p.trim().parse::<f64>().ok().map(|x| a * 60.0 + x)
+        })
+        .map_or(0, |v: f64| v.round() as i64)
+}
+
+/// The track of one `otrk` record's fields and its normalised path; `file` stays `None` (the caller knows the drive root).
+/// Text shapes as in [`track`]; `uadd` (seconds since 1970) wins over the `tadd` text. `None`: no `pfil`.
+fn read_track(f: &[Rec]) -> Option<(String, Track)> {
+    let text = |tag: &[u8; 4]| {
+        tlv::find(f, tag)
+            .map(|d| tlv::from_utf16(d).trim_matches('\0').to_string())
+            .unwrap_or_default()
+    };
+    let path = norm(&text(b"pfil"));
+    if path.is_empty() {
+        return None;
+    }
+    let added = tlv::find(f, b"uadd")
+        .and_then(|d| <[u8; 4]>::try_from(d).ok())
+        .map(|b| u64::from(u32::from_be_bytes(b)))
+        .or_else(|| text(b"tadd").parse().ok());
+    let t = Track {
+        title: text(b"tsng"),
+        artist: text(b"tart"),
+        album: text(b"talb"),
+        genre: text(b"tgen"),
+        label: text(b"tlbl"),
+        key: text(b"tkey"),
+        comment: text(b"tcom"),
+        bpm_x100: leading_f64(&text(b"tbpm")).map_or(0, |v| (v * 100.0).round() as i64),
+        length_s: seconds(&text(b"tlen")),
+        bitrate: leading_f64(&text(b"tbit")).map_or(0, |v| v.round() as u32),
+        sample_rate: leading_f64(&text(b"tsmp")).map_or(0, |v| {
+            (if v < 1000.0 { v * 1000.0 } else { v }).round() as u32
+        }),
+        date_added: added
+            .and_then(|s| chrono::DateTime::from_timestamp(i64::try_from(s).ok()?, 0))
+            .map(|d| d.format("%Y-%m-%d").to_string())
+            .unwrap_or_default(),
+        ..Track::default()
+    };
+    Some((path, t))
+}
+
+/// Every track record of the file as `(normalised path, track)`, in file order.
+pub fn read(buf: &[u8]) -> Result<Vec<(String, Track)>, String> {
+    Ok(tlv::parse(buf)?
+        .iter()
+        .filter(|r| &r.tag == b"otrk")
+        .filter_map(|r| read_track(&tlv::parse(r.data).ok()?))
         .collect())
 }
 

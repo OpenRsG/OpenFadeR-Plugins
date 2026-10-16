@@ -1,0 +1,130 @@
+//! Fixtures shared by the export and read tests.
+#![allow(dead_code)]
+
+use openfader_plugin::library::{Analysis, Beat, Cue, Playlist, Snapshot, Track};
+use std::path::PathBuf;
+
+pub struct Dir(pub PathBuf);
+
+impl Dir {
+    pub fn new(tag: &str) -> Self {
+        let p = std::env::temp_dir().join(format!("virtualdj-{}-{tag}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&p);
+        std::fs::create_dir_all(&p).unwrap();
+        Self(p)
+    }
+
+    pub fn join(&self, p: &str) -> PathBuf {
+        self.0.join(p)
+    }
+}
+
+impl Drop for Dir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// A mono 8-bit WAV of `n` samples: the smallest real audio file; `n` makes files differ in size.
+pub fn wav(n: u32) -> Vec<u8> {
+    let mut b = b"RIFF".to_vec();
+    b.extend((36 + n).to_le_bytes());
+    b.extend(b"WAVEfmt ");
+    b.extend(16u32.to_le_bytes());
+    b.extend([1, 0, 1, 0]);
+    b.extend(8000u32.to_le_bytes());
+    b.extend(8000u32.to_le_bytes());
+    b.extend([1, 0, 8, 0]);
+    b.extend(b"data");
+    b.extend(n.to_le_bytes());
+    b.extend(std::iter::repeat_n(128u8, n as usize));
+    b
+}
+
+pub fn track(src: &Dir, file: &str, title: &str, n: u32) -> Track {
+    std::fs::write(src.join(file), wav(n)).unwrap();
+    Track {
+        title: title.into(),
+        artist: "Art & <Ist>".into(),
+        album: "Album".into(),
+        genre: "House".into(),
+        label: "Lab\"el".into(),
+        key: "8A".into(),
+        bpm_x100: 12000,
+        length_s: 90,
+        file: Some(src.join(file)),
+        rating: 4,
+        comment: "line one\nline two & <more>".into(),
+        date_added: "2026-03-04".into(),
+        bitrate: 320,
+        ..Track::default()
+    }
+}
+
+pub fn cue(
+    hot_cue: u16,
+    time_ms: u32,
+    loop_end_ms: Option<u32>,
+    color: Option<[u8; 3]>,
+    comment: Option<&str>,
+) -> Cue {
+    Cue {
+        hot_cue,
+        time_ms,
+        loop_end_ms,
+        color,
+        comment: comment.map(Into::into),
+    }
+}
+
+/// 120 BPM grid, first downbeat at 250 ms (a half beat of lead-in before it).
+pub fn analysis(cues: Vec<Cue>) -> Analysis {
+    let beats = (0..8)
+        .map(|i| Beat {
+            bar_pos: (i % 4 + 1) as u16,
+            bpm_x100: 12000,
+            time_ms: 250 + i * 500,
+        })
+        .collect();
+    Analysis {
+        beats,
+        cues,
+        key: Some("8A".into()),
+        ..Analysis::default()
+    }
+}
+
+pub fn playlist(name: &str, depth: usize, is_folder: bool) -> Playlist {
+    Playlist {
+        id: name.into(),
+        name: name.into(),
+        depth,
+        is_folder,
+    }
+}
+
+/// Two tracks (the first with a grid, hot and memory cues and loops), a folder with a list, a top-level list.
+pub fn snapshot(src: &Dir) -> Snapshot {
+    let cues = vec![
+        cue(3, 20_000, Some(22_000), Some([0, 255, 0]), None),
+        cue(1, 10_000, None, Some([255, 0, 0]), Some("Drop")),
+        cue(0, 5_000, None, None, None),
+        cue(0, 30_000, Some(32_000), None, None),
+    ];
+    Snapshot {
+        tracks: vec![
+            (
+                track(src, "a.wav", "Title \"A\" & <1> 'x'\nb", 400),
+                Some(analysis(cues)),
+            ),
+            (track(src, "b.wav", "Plain", 700), None),
+        ],
+        playlists: vec![
+            playlist("Sets", 0, true),
+            playlist("Warm up", 1, false),
+            playlist("Root/List", 0, false),
+        ],
+        members: vec![vec![], vec![0, 1], vec![1]],
+        ..Snapshot::default()
+    }
+}

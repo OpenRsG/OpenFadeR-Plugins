@@ -1,4 +1,4 @@
-//! Serato DJ library on a USB stick or SD card (export only).
+//! Serato DJ library: read from a computer or a USB stick or SD card, written to a stick or card.
 //!
 //! | Where (below the drive root) | What |
 //! |---|---|
@@ -13,15 +13,18 @@
 //!
 //! Format sources: <https://github.com/Holzhaus/serato-tags> (tags, colours), Mixxx's `src/library/serato/` and
 //! `src/track/serato/` (database and crates); the crate headers and text shapes are observed in files Serato wrote.
+//! The reader (`reader.rs`) takes the same files back: the library of a computer or of a stick.
 
 pub mod crate_file;
 pub mod database;
 mod export;
+mod reader;
 pub mod tag;
 mod tlv;
 
 use openfader_plugin::library::{
-    DeviceInfo, ExportOptions, ExportReport, Feature, LibraryPlugin, Probe, Snapshot, Source,
+    Capabilities, DeviceInfo, ExportOptions, ExportReport, Feature, LibraryPlugin, Probe, Snapshot,
+    Source,
 };
 use serde_json::Value;
 use std::path::Path;
@@ -33,12 +36,23 @@ const LIBRARY: &str = "Serato library";
 pub struct Plugin;
 
 impl LibraryPlugin for Plugin {
-    fn probe(_path: &Path) -> Option<Probe> {
-        None
+    fn probe(path: &Path) -> Option<Probe> {
+        reader::probe(path)
     }
 
-    fn open(_path: &Path, _settings: &Value) -> Result<Box<dyn Source>, String> {
-        Err("the Serato plugin reads no library".into())
+    fn open(path: &Path, _settings: &Value) -> Result<Box<dyn Source>, String> {
+        reader::open(path)
+    }
+
+    fn analysis_ref(
+        reference: &str,
+        _settings: &Value,
+    ) -> Option<openfader_plugin::library::Analysis> {
+        reader::analysis_ref(reference)
+    }
+
+    fn capabilities(_settings: &Value) -> Capabilities {
+        reader::capabilities()
     }
 
     fn device_probe(root: &Path, _settings: &Value) -> Result<DeviceInfo, String> {

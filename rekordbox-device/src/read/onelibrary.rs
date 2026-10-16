@@ -13,24 +13,32 @@
 //! `history_content(history_id, content_id, sequenceNo)`; column names also match pyrekordbox
 //! `onelibrary/models.py` @ 43137cb91f8297c768d2a8bdce5b27b2225f0a2d.
 
-use super::{ONE, analysis};
-use openfader_plugin::library::{Analysis, Playlist, PlaylistRow, Source, Track, playlist_tree};
+use super::{analysis, ONE};
+use openfader_plugin::library::{playlist_tree, Analysis, Playlist, PlaylistRow, Source, Track};
 use rekordbox_common::list::{add_histories, analysis_ref, existing, history_raw, under};
 use rekordbox_common::sql::{open_encrypted, query, track_from_row};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::path::{Path, PathBuf};
 
+/// Holds no connection between calls: an open `exportLibrary.db` cannot be replaced on Windows, and an export rewrites it
+/// while the host still has this source open.
 pub struct OneLibrary {
-    conn: Connection,
+    key: String,
     root: PathBuf,
 }
 
 impl OneLibrary {
     pub fn open(usb_root: &Path, key: &str) -> Result<Self, String> {
-        Ok(Self {
-            conn: open_encrypted(&usb_root.join(ONE), key)?,
+        let this = Self {
+            key: key.to_owned(),
             root: usb_root.to_owned(),
-        })
+        };
+        this.conn()?; // a wrong key or a damaged file fails here, as before
+        Ok(this)
+    }
+
+    fn conn(&self) -> Result<Connection, String> {
+        open_encrypted(&self.root.join(ONE), &self.key)
     }
 }
 
@@ -45,8 +53,9 @@ impl Source for OneLibrary {
 
     /// Siblings by `sequenceNo`; the `history` rows (same shape) follow under "Histories".
     fn playlists(&self) -> Result<Vec<Playlist>, String> {
+        let conn = self.conn()?;
         let rows = |sql: &str| {
-            query(&self.conn, sql, [], |r| {
+            query(&conn, sql, [], |r| {
                 Ok(PlaylistRow {
                     id: r.get::<_, i64>(0)?.to_string(),
                     name: r.get(1)?,
@@ -70,6 +79,7 @@ impl Source for OneLibrary {
 
     /// All tracks by title, or one playlist's tracks in `sequenceNo` order.
     fn tracks(&self, playlist: Option<&str>) -> Result<Vec<Track>, String> {
+        let conn = self.conn()?;
         let base = "select coalesce(c.title, ''), coalesce(a.name, ''), coalesce(k.name, ''), coalesce(g.name, ''), \
                     coalesce(c.bpmx100, 0), coalesce(c.length, 0), coalesce(c.rating, 0), coalesce(c.djComment, ''), \
                     coalesce(c.dateAdded, ''), coalesce(c.bitrate, 0), coalesce(c.samplingRate, 0), coalesce(al.name, ''), \
@@ -89,16 +99,16 @@ impl Source for OneLibrary {
         };
         match playlist {
             Some(id) if history_raw(id).is_some() => query(
-                &self.conn,
+                &conn,
                 &format!(
                     "{base} join history_content hc on hc.content_id = c.content_id where hc.history_id = ?1 order by hc.sequenceNo"
                 ),
                 params![history_raw(id)],
                 row,
             ),
-            None => query(&self.conn, &format!("{base} order by c.title"), [], row),
+            None => query(&conn, &format!("{base} order by c.title"), [], row),
             Some(id) => query(
-                &self.conn,
+                &conn,
                 &format!(
                     "{base} join playlist_content pc on pc.content_id = c.content_id where pc.playlist_id = ?1 order by pc.sequenceNo"
                 ),

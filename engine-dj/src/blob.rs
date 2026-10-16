@@ -1,11 +1,12 @@
-//! The five `PerformanceData` blobs, from plain values to bytes. Layouts: libdjinterop `src/djinterop/engine/v2/*_blob.cpp`
+//! The five `PerformanceData` blobs, from plain values to bytes and back. Layouts: libdjinterop `src/djinterop/engine/v2/*_blob.cpp`
 //! (<https://github.com/xsco/libdjinterop>), which `PerformanceData` of schema 3.0.0 shares with the older `Track` columns.
 //!
 //! `trackData`, `overviewWaveFormData`, `beatData` and `quickCues` are a zlib stream behind a 4-byte big-endian length of the
 //! uncompressed bytes; `loops` is stored raw. Numbers are big-endian except in `loops` and in the beat markers (little-endian).
+//! The `parse_*` functions read what the encoders write and answer `None` for a blob that is cut short or not a zlib stream.
 
-use flate2::{write::ZlibEncoder, Compression};
-use std::io::Write;
+use flate2::{read::ZlibDecoder, write::ZlibEncoder, Compression};
+use std::io::{Read, Write};
 
 /// Hot cue and loop slots of a track.
 pub const SLOTS: usize = 8;
@@ -133,4 +134,149 @@ pub fn loops(loops: &[Option<Loop>]) -> Vec<u8> {
         b.extend(color);
     }
     b
+}
+
+/// Largest uncompressed blob read: a real one is a few hundred KB, the overview waveform being the biggest.
+const MAX_BLOB: usize = 64 << 20;
+
+/// A cursor over blob bytes; every read answers `None` past the end.
+struct Rd<'a>(&'a [u8]);
+
+impl Rd<'_> {
+    fn take<const N: usize>(&mut self) -> Option<[u8; N]> {
+        let (head, rest) = self.0.split_first_chunk::<N>()?;
+        self.0 = rest;
+        Some(*head)
+    }
+    fn u8(&mut self) -> Option<u8> {
+        self.take::<1>().map(|b| b[0])
+    }
+    fn be_f64(&mut self) -> Option<f64> {
+        self.take().map(f64::from_be_bytes)
+    }
+    fn be_i64(&mut self) -> Option<i64> {
+        self.take().map(i64::from_be_bytes)
+    }
+    fn le_f64(&mut self) -> Option<f64> {
+        self.take().map(f64::from_le_bytes)
+    }
+    fn le_i64(&mut self) -> Option<i64> {
+        self.take().map(i64::from_le_bytes)
+    }
+    fn le_i32(&mut self) -> Option<i32> {
+        self.take().map(i32::from_le_bytes)
+    }
+    /// A [`label`]: a length byte and that many bytes of UTF-8 (invalid bytes become U+FFFD).
+    fn label(&mut self) -> Option<String> {
+        let n = usize::from(self.u8()?);
+        let (s, rest) = self.0.split_at_checked(n)?;
+        self.0 = rest;
+        Some(String::from_utf8_lossy(s).into_owned())
+    }
+}
+
+/// The bytes behind a [`zlib`] blob: the length prefix says how many, and no more than that are inflated.
+fn inflate(b: &[u8]) -> Option<Vec<u8>> {
+    let (len, z) = b.split_first_chunk::<4>()?;
+    let len = u32::from_be_bytes(*len) as usize;
+    if len > MAX_BLOB {
+        return None;
+    }
+    let mut out = Vec::with_capacity(len);
+    ZlibDecoder::new(z)
+        .take(len as u64)
+        .read_to_end(&mut out)
+        .ok()?;
+    (out.len() == len).then_some(out)
+}
+
+/// `(sample rate, sample count)` of a `trackData` blob; the key and the loudnesses are not read (the key is `Track.key`).
+pub fn parse_track_data(b: &[u8]) -> Option<(f64, i64)> {
+    let raw = inflate(b)?;
+    let mut r = Rd(&raw);
+    Some((r.be_f64()?, r.be_i64()?))
+}
+
+/// `(sample rate, sample count, markers)` of a `beatData` blob. The markers are the adjusted grid (what the players use), the
+/// default grid when the adjusted one is empty.
+pub fn parse_beat_data(b: &[u8]) -> Option<(f64, f64, Vec<Marker>)> {
+    let raw = inflate(b)?;
+    let mut r = Rd(&raw);
+    let (rate, samples, _is_set) = (r.be_f64()?, r.be_f64()?, r.u8()?);
+    let mut grid = || {
+        let n = r.be_i64()?;
+        // A marker is 24 bytes: a count the rest of the blob cannot hold is garbage.
+        if usize::try_from(n).ok()? > r.0.len() / 24 {
+            return None;
+        }
+        (0..n)
+            .map(|_| {
+                let m = Marker {
+                    offset: r.le_f64()?,
+                    number: r.le_i64()?,
+                };
+                // Beats to the next marker, and the unused word.
+                r.le_i32()?;
+                r.le_i32()?;
+                Some(m)
+            })
+            .collect::<Option<Vec<_>>>()
+    };
+    let default = grid()?;
+    let adjusted = grid().unwrap_or_default();
+    Some((
+        rate,
+        samples,
+        if adjusted.is_empty() {
+            default
+        } else {
+            adjusted
+        },
+    ))
+}
+
+/// `(slots, adjusted main cue)` of a `quickCues` blob; an empty slot has a negative offset.
+pub fn parse_quick_cues(b: &[u8]) -> Option<(Vec<QuickCue>, f64)> {
+    let raw = inflate(b)?;
+    let mut r = Rd(&raw);
+    let n = r.be_i64()?;
+    // A slot is at least 13 bytes.
+    if usize::try_from(n).ok()? > r.0.len() / 13 {
+        return None;
+    }
+    let cues = (0..n)
+        .map(|_| {
+            Some(QuickCue {
+                label: r.label()?,
+                offset: r.be_f64()?,
+                color: r.take()?,
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some((cues, r.be_f64()?))
+}
+
+/// The loops of a raw `loops` blob; a slot that is not set (or has no start and end) is `None`.
+pub fn parse_loops(b: &[u8]) -> Option<Vec<Option<Loop>>> {
+    let mut r = Rd(b);
+    let n = r.le_i64()?;
+    // A loop is at least 23 bytes.
+    if usize::try_from(n).ok()? > r.0.len() / 23 {
+        return None;
+    }
+    (0..n)
+        .map(|_| {
+            let (label, start, end) = (r.label()?, r.le_f64()?, r.le_f64()?);
+            let (start_set, end_set) = (r.u8()?, r.u8()?);
+            let color = r.take()?;
+            Some(
+                (start_set != 0 && end_set != 0 && start >= 0.0 && end > start).then_some(Loop {
+                    label,
+                    start,
+                    end,
+                    color,
+                }),
+            )
+        })
+        .collect()
 }

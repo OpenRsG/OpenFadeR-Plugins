@@ -1,113 +1,15 @@
 //! Snapshot → `export` → `VirtualDJ/database.xml` and lists on a synthetic stick, read back with the crate's XML parser and as
 //! plain text; a second export, a database VirtualDJ wrote, and the failures that must leave the stick alone.
 
-use openfader_plugin::library::{
-    Analysis, Beat, Cue, ExportOptions, LibraryPlugin, Playlist, Snapshot, Track,
-};
+mod common;
+
+use common::{analysis, cue, playlist, snapshot, track, Dir};
+use openfader_plugin::library::{ExportOptions, LibraryPlugin, Snapshot};
 use serde_json::json;
-use std::path::{Path, PathBuf};
-use virtualdj::song::{Style, identity, key_text};
+use std::path::Path;
+use virtualdj::song::{identity, key_text, Style};
 use virtualdj::xml::{self, El};
-use virtualdj::{DATABASE, LIBRARY, Plugin};
-
-struct Dir(PathBuf);
-
-impl Dir {
-    fn new(tag: &str) -> Self {
-        let p = std::env::temp_dir().join(format!("virtualdj-{}-{tag}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&p);
-        std::fs::create_dir_all(&p).unwrap();
-        Self(p)
-    }
-
-    fn join(&self, p: &str) -> PathBuf {
-        self.0.join(p)
-    }
-}
-
-impl Drop for Dir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
-/// A mono 8-bit WAV of `n` samples: the smallest real audio file; `n` makes files differ in size.
-fn wav(n: u32) -> Vec<u8> {
-    let mut b = b"RIFF".to_vec();
-    b.extend((36 + n).to_le_bytes());
-    b.extend(b"WAVEfmt ");
-    b.extend(16u32.to_le_bytes());
-    b.extend([1, 0, 1, 0]);
-    b.extend(8000u32.to_le_bytes());
-    b.extend(8000u32.to_le_bytes());
-    b.extend([1, 0, 8, 0]);
-    b.extend(b"data");
-    b.extend(n.to_le_bytes());
-    b.extend(std::iter::repeat_n(128u8, n as usize));
-    b
-}
-
-fn track(src: &Dir, file: &str, title: &str, n: u32) -> Track {
-    std::fs::write(src.join(file), wav(n)).unwrap();
-    Track {
-        title: title.into(),
-        artist: "Art & <Ist>".into(),
-        album: "Album".into(),
-        genre: "House".into(),
-        label: "Lab\"el".into(),
-        key: "8A".into(),
-        bpm_x100: 12000,
-        length_s: 90,
-        file: Some(src.join(file)),
-        rating: 4,
-        comment: "line one\nline two & <more>".into(),
-        date_added: "2026-03-04".into(),
-        bitrate: 320,
-        ..Track::default()
-    }
-}
-
-fn cue(
-    hot_cue: u16,
-    time_ms: u32,
-    loop_end_ms: Option<u32>,
-    color: Option<[u8; 3]>,
-    comment: Option<&str>,
-) -> Cue {
-    Cue {
-        hot_cue,
-        time_ms,
-        loop_end_ms,
-        color,
-        comment: comment.map(Into::into),
-    }
-}
-
-/// 120 BPM grid, first downbeat at 250 ms (a half beat of lead-in before it).
-fn analysis(cues: Vec<Cue>) -> Analysis {
-    let beats = (0..8)
-        .map(|i| Beat {
-            bar_pos: (i % 4 + 1) as u16,
-            bpm_x100: 12000,
-            time_ms: 250 + i * 500,
-        })
-        .collect();
-    Analysis {
-        beats,
-        cues,
-        key: Some("8A".into()),
-        ..Analysis::default()
-    }
-}
-
-fn playlist(name: &str, depth: usize, is_folder: bool) -> Playlist {
-    Playlist {
-        id: name.into(),
-        name: name.into(),
-        depth,
-        is_folder,
-    }
-}
+use virtualdj::{Plugin, DATABASE, LIBRARY};
 
 fn export(root: &Path, s: &Snapshot) -> openfader_plugin::library::ExportReport {
     Plugin::export(root, s, &ExportOptions::default(), &json!({})).unwrap()
@@ -153,31 +55,6 @@ fn list_songs(path: &Path) -> Vec<(String, String)> {
         .collect()
 }
 
-fn snapshot(src: &Dir) -> Snapshot {
-    let cues = vec![
-        cue(3, 20_000, Some(22_000), Some([0, 255, 0]), None),
-        cue(1, 10_000, None, Some([255, 0, 0]), Some("Drop")),
-        cue(0, 5_000, None, None, None),
-        cue(0, 30_000, Some(32_000), None, None),
-    ];
-    Snapshot {
-        tracks: vec![
-            (
-                track(src, "a.wav", "Title \"A\" & <1> 'x'\nb", 400),
-                Some(analysis(cues)),
-            ),
-            (track(src, "b.wav", "Plain", 700), None),
-        ],
-        playlists: vec![
-            playlist("Sets", 0, true),
-            playlist("Warm up", 1, false),
-            playlist("Root/List", 0, false),
-        ],
-        members: vec![vec![], vec![0, 1], vec![1]],
-        ..Snapshot::default()
-    }
-}
-
 #[test]
 fn writes_songs_cues_grid_and_lists() {
     let (src, stick) = (Dir::new("w-src"), Dir::new("w-stick"));
@@ -191,7 +68,13 @@ fn writes_songs_cues_grid_and_lists() {
     let a = &songs[0];
     // FilePath: drive style, audio really below the root.
     let fp = a.attr("FilePath").unwrap();
-    assert!(fp.starts_with("E:\\Contents\\"), "{fp}");
+    // The drive of the stick on Windows, `E:` where the root has no drive letter.
+    let drive = if cfg!(windows) {
+        stick.0.to_string_lossy()[..2].to_owned()
+    } else {
+        "E:".into()
+    };
+    assert!(fp.starts_with(&format!("{drive}\\Contents\\")), "{fp}");
     assert!(stick.0.join(fp[3..].replace('\\', "/")).is_file(), "{fp}");
     assert_eq!(a.attr("FileSize"), Some((44 + 400).to_string().as_str()));
     // Escaping round trip, and the raw text really escaped.
@@ -222,7 +105,7 @@ fn writes_songs_cues_grid_and_lists() {
         (Some("90.000000"), Some("320"))
     );
     assert_eq!(infos.attr("FirstSeen"), Some("1772582400")); // 2026-03-04 UTC
-    // Poi: grid anchor, hot cues in seconds with ARGB colour, memory cue, loops.
+                                                             // Poi: grid anchor, hot cues in seconds with ARGB colour, memory cue, loops.
     assert_eq!(poi(a, "Type", "beatgrid").attr("Pos"), Some("0.250000"));
     let c1 = poi(a, "Num", "1");
     assert_eq!(
@@ -457,11 +340,9 @@ fn older_folders_layout_and_macos_volumes() {
         fp.starts_with("/Volumes/KEY/Contents/") && !fp.contains('\\'),
         "{fp}"
     );
-    assert!(
-        stick
-            .join("VirtualDJ/Folders/Sets/Warm up.vdjfolder")
-            .is_file()
-    );
+    assert!(stick
+        .join("VirtualDJ/Folders/Sets/Warm up.vdjfolder")
+        .is_file());
     assert!(!stick.join("VirtualDJ/MyLists").exists());
     // Identity ignores the drive name, the separator and the case.
     assert_eq!(
