@@ -340,7 +340,7 @@ mod tests {
         assert_eq!(titles("By location"), ["Unrated", "Zed & Co"]); // KeyType 1
         assert_eq!(titles("Dangling"), ["Alpha"]); // unknown key dropped
         assert!(titles("Packs").is_empty() && titles("Empty folder").is_empty());
-        std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
+        let _ = std::fs::remove_dir_all(p.parent().unwrap()); // cleanup: Windows may still hold a handle
     }
 
     #[test]
@@ -353,13 +353,13 @@ mod tests {
             alpha.file.as_deref(),
             Some(Path::new("/home/y/Music/Pack 1/a.mp3"))
         );
-        std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
+        let _ = std::fs::remove_dir_all(p.parent().unwrap()); // cleanup: Windows may still hold a handle
 
         let p = write("c", "<html><body/></html>");
         assert!(RekordboxXml::open(&p, &Vec::new())
             .err()
             .unwrap()
             .contains("DJ_PLAYLISTS"));
-        std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
+        let _ = std::fs::remove_dir_all(p.parent().unwrap()); // cleanup: Windows may still hold a handle
     }
 }

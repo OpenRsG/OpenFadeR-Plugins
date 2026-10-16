@@ -333,7 +333,7 @@ mod tests {
             ((25, 1, 1), (1, 0, 0), (11, 7, 1))
         );
         drop(c);
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
     }
 
     /// The device configuration reaches `category`, `sort` (with the Column), `color`, `property` and `isHotCueAutoLoadOn`.
@@ -387,6 +387,6 @@ mod tests {
             "0"
         );
         drop(c);
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
     }
 }

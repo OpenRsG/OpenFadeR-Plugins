@@ -77,7 +77,7 @@ fn probe_claims_only_encrypted_db_files() {
     assert!(MasterDb::probe(&plain).is_none());
     assert!(MasterDb::probe(&d.join("missing.db")).is_none());
     assert!(MasterDb::probe(&d).is_none());
-    fs::remove_dir_all(d).unwrap();
+    let _ = fs::remove_dir_all(d); // cleanup: Windows may still hold a handle
 }
 
 #[test]
@@ -141,5 +141,5 @@ fn reads_playlists_tracks_smart_lists_and_histories() {
     assert_eq!(titles(&*lib, Some("history:h2")), ["Alpha Song"]);
     assert!(titles(&*lib, Some("history:h1")).is_empty()); // a folder lists no tracks
     drop(lib); // Windows cannot delete a database that is still open
-    fs::remove_dir_all(d).unwrap();
+    let _ = fs::remove_dir_all(d); // cleanup: Windows may still hold a handle
 }

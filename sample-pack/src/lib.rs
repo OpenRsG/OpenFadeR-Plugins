@@ -330,7 +330,7 @@ mod tests {
         let again = Samples::open(&spp, &cache).unwrap();
         assert_eq!(again.tracks(None).unwrap().len(), 2);
         assert_eq!(marker.metadata().unwrap().modified().unwrap(), before);
-        std::fs::remove_dir_all(d).unwrap();
+        let _ = std::fs::remove_dir_all(d); // cleanup: Windows may still hold a handle
     }
 
     #[test]
@@ -363,7 +363,7 @@ mod tests {
         let at = z.windows(4).position(|w| w == b"RIFF").unwrap() + 50;
         z[at] ^= 0xff;
         assert!(run(z).contains("damaged"));
-        std::fs::remove_dir_all(d).unwrap();
+        let _ = std::fs::remove_dir_all(d); // cleanup: Windows may still hold a handle
     }
 
     /// The factory pack of the installer (git-ignored, read in place) unpacks with every CRC right; skipped when it is not there.
@@ -384,6 +384,6 @@ mod tests {
             bank[0].bpm_x100, 12300,
             "House1 is the first track of the first list"
         );
-        std::fs::remove_dir_all(d).unwrap();
+        let _ = std::fs::remove_dir_all(d); // cleanup: Windows may still hold a handle
     }
 }

@@ -351,7 +351,7 @@ mod tests {
         std::fs::create_dir_all(jpg.parent().unwrap()).unwrap();
         std::fs::write(&jpg, [0xff, 0xd8]).unwrap();
         assert_eq!(e.tracks(None).unwrap()[0].artwork, Some(jpg));
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
     }
 
     fn u32s(v: &[u32]) -> Vec<u8> {

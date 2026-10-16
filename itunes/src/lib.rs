@@ -358,6 +358,6 @@ mod tests {
         assert_eq!((hit.score, hit.kind.as_str()), (60, "iTunes"));
         std::fs::write(&p, "<DJ_PLAYLISTS/>").unwrap();
         assert!(ITunesPlugin::probe(&p).is_none());
-        std::fs::remove_dir_all(dir).unwrap();
+        let _ = std::fs::remove_dir_all(dir); // cleanup: Windows may still hold a handle
     }
 }

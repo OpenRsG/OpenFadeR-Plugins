@@ -118,7 +118,7 @@ fn three_four_time_round_trips() {
     };
     assert_eq!(pos(0), [1, 2, 3, 1]);
     assert_eq!(pos(3000), [2, 3, 1, 2]);
-    std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(p.parent().unwrap()); // cleanup: Windows may still hold a handle
 }
 
 #[test]
@@ -215,7 +215,7 @@ fn round_trip() {
     assert_eq!(a.cues, analysis.cues);
     let plain = got.analysis(&read[1]).unwrap(); // no grid, no cues → no TEMPO/POSITION_MARK
     assert!(plain.beats.is_empty() && plain.cues.is_empty());
-    std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(p.parent().unwrap()); // cleanup: Windows may still hold a handle
 }
 
 /// `export_grid` off leaves the TEMPO elements out; cues stay. The writer never overwrites a file.
@@ -238,7 +238,7 @@ fn export_grid_setting_and_no_overwrite() {
         "{text}"
     );
     assert!(RekordboxXmlPlugin::write_collection(&p, &snap, &json!({})).is_err());
-    std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(p.parent().unwrap()); // cleanup: Windows may still hold a handle
 }
 
 #[test]
@@ -252,7 +252,7 @@ fn probe_wants_a_rekordbox_xml() {
     let txt = p.with_extension("txt");
     std::fs::write(&txt, "<DJ_PLAYLISTS/>").unwrap();
     assert!(RekordboxXmlPlugin::probe(&txt).is_none());
-    std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(p.parent().unwrap()); // cleanup: Windows may still hold a handle
 }
 
 const XML: &str = r#"<DJ_PLAYLISTS Version="1.0.0"><COLLECTION Entries="2">
@@ -317,5 +317,5 @@ fn tempo_list_and_marks_become_analysis() {
     let mut other = tracks[0].clone();
     other.file = None;
     assert!(lib.analysis(&other).is_none());
-    std::fs::remove_dir_all(p.parent().unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(p.parent().unwrap()); // cleanup: Windows may still hold a handle
 }

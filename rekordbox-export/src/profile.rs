@@ -123,6 +123,6 @@ mod tests {
         assert!(!write(&p, "DJ Two").unwrap());
         let b = std::fs::read(p.join(FILE)).unwrap();
         assert_eq!(Profile::parse(&b).unwrap().name, "DJ One");
-        std::fs::remove_dir_all(d).unwrap();
+        let _ = std::fs::remove_dir_all(d); // cleanup: Windows may still hold a handle
     }
 }

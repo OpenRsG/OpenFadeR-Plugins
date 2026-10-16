@@ -164,6 +164,6 @@ mod tests {
             q("select count(*) from hotCueBankList where name = 'Opening'"),
             1
         );
-        std::fs::remove_dir_all(dir).unwrap();
+        let _ = std::fs::remove_dir_all(dir); // cleanup: Windows may still hold a handle
     }
 }

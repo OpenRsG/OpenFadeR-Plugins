@@ -76,7 +76,7 @@ fn onelibrary_schema_and_constant_tables_match_the_real_file() {
         let sql = format!("select * from {table} order by 1");
         assert_eq!(dump(&ours, &sql), dump(&real, &sql), "{table}");
     }
-    std::fs::remove_dir_all(dir).unwrap();
+    let _ = std::fs::remove_dir_all(dir); // cleanup: Windows may still hold a handle
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn djprofile_round_trips_the_real_one_and_ours_has_the_same_shape() {
     assert_eq!(ours.len(), real.len());
     assert_eq!(ours[0x0c..0x1c], real[0x0c..0x1c], "the zero run");
     assert_eq!(Profile::parse(&ours).unwrap().name, "Test DJ");
-    std::fs::remove_dir_all(d).unwrap();
+    let _ = std::fs::remove_dir_all(d); // cleanup: Windows may still hold a handle
 }
 
 /// `(offset, len)` of the first section `tag` of an ANLZ file.

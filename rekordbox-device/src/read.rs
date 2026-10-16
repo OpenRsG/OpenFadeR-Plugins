@@ -72,6 +72,6 @@ mod tests {
         let p = probe(&dir).unwrap();
         assert_eq!((p.score, p.kind.as_str()), (90, "USB (Device Library)"));
         assert!(open(&dir, &json!({})).is_err()); // export.pdb is no database either: the error, not a panic
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
     }
 }

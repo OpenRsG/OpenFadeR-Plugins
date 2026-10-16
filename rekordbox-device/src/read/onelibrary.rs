@@ -166,6 +166,6 @@ mod tests {
         assert_eq!(titles("history:2"), ["B", "A"]); // sequenceNo order
         assert_eq!(titles("history:3"), ["A"]);
         assert!(titles("1").is_empty()); // playlist 1 is not history 1
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
     }
 }

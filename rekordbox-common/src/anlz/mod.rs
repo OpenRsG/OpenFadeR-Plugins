@@ -210,7 +210,7 @@ mod tests {
         std::fs::write(dir.join("ANLZ0000.EXT"), pmai(&ext)).unwrap();
         std::fs::write(dir.join("ANLZ0000.2EX"), pmai(&three_band_body())).unwrap();
         let a = load_track(&dat).unwrap();
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
         assert_eq!(a.detail, [7, 8]);
         assert_eq!(a.cues[0].comment.as_deref(), Some("hi"));
         assert_eq!(a.three_band_detail, [[7, 8, 9]]);

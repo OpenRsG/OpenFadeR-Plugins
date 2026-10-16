@@ -244,7 +244,7 @@ fn write_then_read_returns_the_edited_settings() {
     assert_eq!(back.get("dat.language").unwrap(), "131");
     assert_eq!(back.get("dat.waveform_color").unwrap(), "4");
     assert_eq!(back.settings, c.settings);
-    std::fs::remove_dir_all(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
 }
 
 fn temp(name: &str) -> std::path::PathBuf {
@@ -345,7 +345,7 @@ fn the_jog_image_value_is_a_jpeg_file() {
     );
     let c = DeviceConfig::from_values(&values(&[("jog_custom", "1"), ("jog_image", &path(&png))]));
     assert!(c.jog_image.is_empty() && c.files().len() == 4);
-    std::fs::remove_dir_all(&dir).unwrap();
+    let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
 }
 
 #[test]
@@ -406,7 +406,7 @@ fn write_then_read_round_trips_on_a_folder_and_the_fingerprints_agree() {
     // a damaged one is an error
     std::fs::write(dir.join("MYSETTING2.DAT"), b"junk").unwrap();
     assert!(read(&root, &Value::Null).is_err());
-    std::fs::remove_dir_all(&root).unwrap();
+    let _ = std::fs::remove_dir_all(&root); // cleanup: Windows may still hold a handle
 }
 
 #[test]
@@ -424,5 +424,5 @@ fn writing_a_chosen_jog_image_puts_it_next_to_the_settings() {
         std::fs::read(root.join(DIR).join(JOG_IMAGE_FILE)).unwrap(),
         [0xff, 0xd8, 0xff, 1]
     );
-    std::fs::remove_dir_all(&root).unwrap();
+    let _ = std::fs::remove_dir_all(&root); // cleanup: Windows may still hold a handle
 }

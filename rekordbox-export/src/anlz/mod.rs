@@ -308,7 +308,7 @@ mod tests {
         std::fs::write(dir.join("ANLZ0000.EXT"), &files.ext).unwrap();
         std::fs::write(dir.join("ANLZ0000.2EX"), &files.ex2).unwrap();
         let back = load_track(&dir.join("ANLZ0000.DAT"));
-        std::fs::remove_dir_all(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
         let back = back.unwrap();
         assert_eq!(back.path.as_deref(), Some("/Contents/Artist/Album/x.mp3"));
         assert_eq!(back.beats, a.beats);
