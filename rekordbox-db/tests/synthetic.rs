@@ -113,8 +113,8 @@ fn reads_playlists_tracks_smart_lists_and_histories() {
         Some(std::path::Path::new("/mapped/a.wav"))
     );
     assert_eq!(
-        a.analysis_ref.as_deref(),
-        Some(d.join("share/PIONEER/USBANLZ/a.DAT").to_str().unwrap())
+        a.analysis_ref.as_deref().map(std::path::Path::new), // as paths: Windows mixes `\` and `/` here
+        Some(d.join("share/PIONEER/USBANLZ/a.DAT").as_path())
     );
     assert_eq!(all[1].rating, 5); // clamped
     assert!(all[1].analysis_ref.is_none());
