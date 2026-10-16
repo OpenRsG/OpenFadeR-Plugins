@@ -121,10 +121,6 @@ fn audio_files(root: &Path) -> usize {
 }
 
 fn exp(root: &Path, snap: &Snapshot) -> openfader_plugin::library::ExportReport {
-    export(root, snap, &ExportOptions::default(), None).unwrap()
-}
-
-fn exp_key(root: &Path, snap: &Snapshot) -> openfader_plugin::library::ExportReport {
     export(root, snap, &ExportOptions::default(), Some(KEY)).unwrap()
 }
 
@@ -147,14 +143,13 @@ fn remove_op(
     root: &Path,
     target: &RemoveTarget,
     delete_tracks: bool,
-    key: Option<&str>,
 ) -> Result<openfader_plugin::library::RemoveReport, String> {
     remove(
         root,
         target,
         delete_tracks,
         &BTreeMap::new(),
-        &settings(key),
+        &settings(Some(KEY)),
     )
 }
 
@@ -318,10 +313,10 @@ fn space_and_list_limits_are_checked_up_front() {
 }
 
 #[test]
-fn onelibrary_update_keeps_what_players_wrote_and_refuses_to_go_stale() {
+fn onelibrary_update_keeps_what_players_wrote() {
     let r = Root::new("one");
     let full = setup(&r);
-    let first = exp_key(&r.dev(), &narrowed(&full, &["p1"]));
+    let first = exp(&r.dev(), &narrowed(&full, &["p1"]));
     assert!(first.notes.is_empty(), "{:?}", first.notes);
     let id_before: i64 = one(&r.dev())
         .query_row("select myTagMasterDBID from property", [], |x| x.get(0))
@@ -341,16 +336,7 @@ fn onelibrary_update_keeps_what_players_wrote_and_refuses_to_go_stale() {
         )
         .unwrap();
     }
-    let e = export(
-        &r.dev(),
-        &narrowed(&full, &["p2"]),
-        &ExportOptions::default(),
-        None,
-    )
-    .unwrap_err();
-    assert!(e.contains("OneLibrary") && e.contains("key"), "{e}");
-
-    exp_key(&r.dev(), &narrowed(&full, &["p2"]));
+    exp(&r.dev(), &narrowed(&full, &["p2"]));
     let c = one(&r.dev());
     let count = |t: &str| {
         c.query_row(&format!("select count(*) from {t}"), [], |x| {
@@ -387,12 +373,12 @@ fn deleting_a_playlist_deletes_only_tracks_no_other_playlist_lists() {
     let full = setup(&r);
     exp(&r.dev(), &full);
 
-    let kept = remove_op(&r.dev(), &playlist("P3"), false, None).unwrap();
+    let kept = remove_op(&r.dev(), &playlist("P3"), false).unwrap();
     assert_eq!((kept.tracks, kept.playlists), (0, 1));
     assert_eq!(titles(&r.dev()).len(), 4);
 
     // P1 = [a, b]; a is in no other playlist now (P3 is gone), b neither: both go with the files.
-    let gone = remove_op(&r.dev(), &playlist("P1"), true, None).unwrap();
+    let gone = remove_op(&r.dev(), &playlist("P1"), true).unwrap();
     assert_eq!((gone.tracks, gone.playlists), (2, 1), "{:?}", gone.warnings);
     assert_eq!(titles(&r.dev()), ["T2", "T3"]);
     assert_eq!(audio_files(&r.dev()), 2);
@@ -413,10 +399,10 @@ fn deleting_a_playlist_deletes_only_tracks_no_other_playlist_lists() {
         .find(|t| t.title == "T3")
         .unwrap();
     let file = on_device(&r.dev(), &t3.file_path);
-    let one = remove_op(&r.dev(), &RemoveTarget::Track { file }, false, None).unwrap();
+    let one = remove_op(&r.dev(), &RemoveTarget::Track { file }, false).unwrap();
     assert_eq!(one.tracks, 1);
     assert_eq!(titles(&r.dev()), ["T2"]);
-    assert!(remove_op(&r.dev(), &playlist("nope"), false, None).is_err());
+    assert!(remove_op(&r.dev(), &playlist("nope"), false).is_err());
 }
 
 #[test]
@@ -424,6 +410,7 @@ fn convert_builds_the_onelibrary_from_the_device_library() {
     let r = Root::new("convert");
     let full = setup(&r);
     exp(&r.dev(), &full);
+    std::fs::remove_file(r.dev().join("PIONEER/rekordbox/exportLibrary.db")).unwrap();
     let mut d = db(&r.dev());
     d.histories.push(History {
         id: 3,
@@ -484,10 +471,7 @@ fn convert_builds_the_onelibrary_from_the_device_library() {
         "{ask:?}"
     );
     assert!(act(true).confirm.is_none());
-    assert!(
-        device_action(&r.dev(), "convert", true, &BTreeMap::new(), &settings(None)).is_err(),
-        "converting needs the key"
-    );
+
     assert!(device_action(&r.dev(), "bogus", true, &BTreeMap::new(), &settings(None)).is_err());
 }
 
@@ -580,7 +564,7 @@ fn carry_history_into_onelibrary(root: &Path, name: &str, ids: &[u32]) {
 fn histories_are_deleted_from_both_libraries() {
     let r = Root::new("history");
     let full = setup(&r);
-    exp_key(&r.dev(), &full);
+    exp(&r.dev(), &full);
     let mut d = db(&r.dev());
     let ids: Vec<u32> = d.tracks.iter().map(|t| t.id).collect();
     d.histories.push(History {
@@ -594,14 +578,7 @@ fn histories_are_deleted_from_both_libraries() {
     let target = RemoveTarget::Histories {
         names: vec!["HISTORY 2026-02-03".into()],
     };
-    let e = remove_op(&r.dev(), &target, false, None).unwrap_err();
-    assert!(e.contains("OneLibrary") && e.contains("key"), "{e}");
-    assert_eq!(
-        remove_op(&r.dev(), &target, false, Some(KEY))
-            .unwrap()
-            .histories,
-        1
-    );
+    assert_eq!(remove_op(&r.dev(), &target, false).unwrap().histories, 1);
     assert!(db(&r.dev()).histories.is_empty());
     assert!(names(&one(&r.dev()), "select name from history").is_empty());
     assert_eq!(titles(&r.dev()).len(), 4, "the tracks stay");
@@ -642,7 +619,7 @@ fn hot_cue_bank_lists_are_written_to_the_onelibrary_and_survive_updates() {
         (1, 1_500_000, 1)
     );
     // A later export without banks keeps the device's list.
-    exp_key(&r.dev(), &narrowed(&full, &["p2"]));
+    exp(&r.dev(), &narrowed(&full, &["p2"]));
     assert_eq!(
         (
             q("select count(*) from hotCueBankList"),

@@ -1,0 +1,16 @@
+{
+  "name": "traktor",
+  "version": "0.1.0",
+  "description": "Traktor collection (Traktor/collection.nml) on USB sticks: written next to the other libraries and sharing their audio, for Traktor's Import another Collection.",
+  "library": {
+    "lib": {
+      "linux": "libtraktor.so",
+      "windows": "traktor.dll",
+      "macos": "libtraktor.dylib"
+    },
+    "formats": [
+      "dir"
+    ],
+    "device": true
+  }
+}

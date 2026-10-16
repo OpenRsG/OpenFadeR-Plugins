@@ -7,7 +7,7 @@ mod onelibrary;
 mod pdb;
 
 use openfader_plugin::library::{Analysis, Probe, Source, Track};
-use rekordbox_common::{anlz, setting};
+use rekordbox_common::{anlz, onelibrary_key};
 use serde_json::Value;
 use std::path::Path;
 
@@ -30,17 +30,17 @@ pub fn probe(path: &Path) -> Option<Probe> {
     })
 }
 
-/// The OneLibrary when its key setting is set and the file is there, else the `export.pdb` library.
+/// The OneLibrary when it is there (key: [`rekordbox_common::onelibrary_key`]), else the `export.pdb` library.
 pub fn open(path: &Path, settings: &Value) -> Result<Box<dyn Source>, String> {
-    let one = path.join(ONE).is_file();
-    match setting(settings, "onelibrary_key") {
-        Some(key) if one => Ok(Box::new(onelibrary::OneLibrary::open(path, &key)?)),
-        _ if path.join(PDB).is_file() => Ok(Box::new(pdb::Export::open(path)?)),
-        None if one => Err(format!(
-            "{}: only the encrypted OneLibrary is there: set its key in the plugin's settings",
-            path.display()
-        )),
-        _ => Err(format!("{}: no device library", path.display())),
+    if path.join(ONE).is_file() {
+        Ok(Box::new(onelibrary::OneLibrary::open(
+            path,
+            &onelibrary_key(settings),
+        )?))
+    } else if path.join(PDB).is_file() {
+        Ok(Box::new(pdb::Export::open(path)?))
+    } else {
+        Err(format!("{}: no device library", path.display()))
     }
 }
 
@@ -66,11 +66,12 @@ mod tests {
         assert!(probe(&dir).is_none() && open(&dir, &json!({})).is_err());
         std::fs::write(dir.join(ONE), b"x").unwrap();
         assert_eq!(probe(&dir).unwrap().kind, "USB (OneLibrary)");
-        let err = open(&dir, &json!({"onelibrary_key": " "})).err().unwrap();
-        assert!(err.contains("key"), "{err}"); // no key: the encrypted library alone cannot be read
+        // garbage under the built-in key: an error when it is read, not a panic
+        assert!(open(&dir, &json!({})).and_then(|s| s.tracks(None)).is_err());
         std::fs::write(dir.join(PDB), b"x").unwrap();
         let p = probe(&dir).unwrap();
         assert_eq!((p.score, p.kind.as_str()), (90, "USB (Device Library)"));
+        std::fs::remove_file(dir.join(ONE)).unwrap();
         assert!(open(&dir, &json!({})).is_err()); // export.pdb is no database either: the error, not a panic
         let _ = std::fs::remove_dir_all(&dir); // cleanup: Windows may still hold a handle
     }

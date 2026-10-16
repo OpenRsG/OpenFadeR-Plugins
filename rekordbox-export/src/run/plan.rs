@@ -29,11 +29,14 @@ fn mib(b: u64) -> String {
 }
 
 /// Hands out device paths: the first of `name`, `stem (2).ext`, … in a directory that is free, or that holds the same track
-/// already (an unclaimed device track of the same size).
+/// already (an unclaimed device track of the same size); failing that, an unclaimed device track of the same file name and
+/// size anywhere (a library written by another program files its audio under other folder names).
 struct Resolver<'a> {
     db: &'a Db,
     /// Lowercased device path → index into [`Db::tracks`].
     by_path: HashMap<String, usize>,
+    /// (Lowercased file name, size) → indexes into [`Db::tracks`].
+    by_name: HashMap<(String, u64), Vec<usize>>,
     /// Lowercased paths given to new tracks.
     used: HashSet<String>,
     /// Device tracks already matched to a snapshot track.
@@ -42,6 +45,14 @@ struct Resolver<'a> {
 
 impl<'a> Resolver<'a> {
     fn new(db: &'a Db) -> Self {
+        let mut by_name: HashMap<(String, u64), Vec<usize>> = HashMap::new();
+        for (i, t) in db.tracks.iter().enumerate() {
+            let name = t.file_path.rsplit('/').next().unwrap_or_default();
+            by_name
+                .entry((name.to_lowercase(), u64::from(t.file_size)))
+                .or_default()
+                .push(i);
+        }
         let by_path = db
             .tracks
             .iter()
@@ -51,13 +62,22 @@ impl<'a> Resolver<'a> {
         Self {
             db,
             by_path,
+            by_name,
             used: HashSet::new(),
             claimed: HashSet::new(),
         }
     }
 
-    /// The path of a track of `size` bytes named `name` in directory `dir`, and the device track it is (`None` = new).
-    fn resolve(&mut self, dir: &str, name: &str, size: u64) -> (String, Option<usize>) {
+    /// The path of a track of `size` bytes whose source file is `original` (cleaned: `name`) in directory `dir`, and the device
+    /// track it is (`None` = new).
+    fn resolve(
+        &mut self,
+        dir: &str,
+        name: &str,
+        original: &str,
+        size: u64,
+    ) -> (String, Option<usize>) {
+        let size = size.min(u64::from(u32::MAX));
         let (stem, ext) = name
             .rsplit_once('.')
             .map_or((name, String::new()), |(s, e)| (s, format!(".{e}")));
@@ -71,15 +91,37 @@ impl<'a> Resolver<'a> {
             match self.by_path.get(&key) {
                 Some(&known)
                     if !self.claimed.contains(&known)
-                        && u64::from(self.db.tracks[known].file_size)
-                            == size.min(u64::from(u32::MAX)) =>
+                        && u64::from(self.db.tracks[known].file_size) == size =>
                 {
                     self.claimed.insert(known);
                     return (p, Some(known));
                 }
                 Some(_) => {}
-                None if self.used.insert(key) => return (p, None),
+                None if !self.used.contains(&key) => break,
                 None => {}
+            }
+        }
+        let elsewhere = [original, name].iter().find_map(|n| {
+            self.by_name
+                .get(&(n.to_lowercase(), size))?
+                .iter()
+                .copied()
+                .find(|i| !self.claimed.contains(i))
+        });
+        if let Some(known) = elsewhere {
+            self.claimed.insert(known);
+            let p = self.db.tracks[known].file_path.trim_start_matches('/');
+            return (p.to_owned(), Some(known));
+        }
+        for n in 1.. {
+            let p = if n == 1 {
+                format!("{dir}/{name}")
+            } else {
+                format!("{dir}/{stem} ({n}){ext}")
+            };
+            let key = p.to_lowercase();
+            if !self.by_path.contains_key(&key) && self.used.insert(key) {
+                return (p, None);
             }
         }
         unreachable!()
@@ -104,19 +146,17 @@ pub(super) fn make(
             continue;
         };
         let size = at(std::fs::metadata(file), file)?.len();
-        let name = clean(
-            &file
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-            "track",
-        );
+        let original = file
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let name = clean(&original, "track");
         let dir = format!(
             "Contents/{}/{}",
             clean(&t.artist, "UnknownArtist"),
             clean(&t.album, "UnknownAlbum")
         );
-        let (rel, known) = paths.resolve(&dir, &name, size);
+        let (rel, known) = paths.resolve(&dir, &name, &original, size);
         plans.push(Plan {
             i,
             rel,

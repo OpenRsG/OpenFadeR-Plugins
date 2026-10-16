@@ -16,7 +16,7 @@ use super::pdb::{
 };
 use super::progress::Progress;
 use super::settings::DeviceConfig;
-use super::{NEEDS_KEY, ONE, PDB, commit, merge, profile, put, today};
+use super::{ONE, PDB, commit, merge, profile, put, today};
 use openfader_plugin::library::{ExportOptions, ExportReport, Snapshot};
 use plan::Plan;
 use std::collections::HashMap;
@@ -24,12 +24,9 @@ use std::path::{Path, PathBuf};
 use track::Covers;
 
 /// The library to extend; a new one when `dest` has none.
-fn open(dest: &Path, config: &DeviceConfig, key: Option<&str>) -> Result<(Db, Tags), String> {
+fn open(dest: &Path, config: &DeviceConfig) -> Result<(Db, Tags), String> {
     let (pdb_path, one) = (dest.join(PDB), dest.join(ONE));
     if pdb_path.exists() {
-        if one.exists() && key.is_none() {
-            return Err(format!("{} {NEEDS_KEY}", dest.display()));
-        }
         return pdb::read::open(dest, config);
     }
     if one.exists() {
@@ -71,7 +68,7 @@ struct Job<'a> {
     dest: &'a Path,
     o: &'a ExportOptions,
     config: &'a DeviceConfig,
-    key: Option<&'a str>,
+    key: &'a str,
     progress: &'a mut Progress,
     /// The snapshot's track colours by track index.
     colors: HashMap<usize, u8>,
@@ -88,10 +85,10 @@ pub(super) fn run(
     snap: &Snapshot,
     o: &ExportOptions,
     config: &DeviceConfig,
-    key: Option<&str>,
+    key: &str,
     progress: &mut Progress,
 ) -> Result<(ExportReport, Vec<u32>), String> {
-    let (db, tags) = open(dest, config, key)?;
+    let (db, tags) = open(dest, config)?;
     let mut job = Job {
         snap,
         dest,

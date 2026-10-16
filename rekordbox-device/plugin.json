@@ -1,7 +1,7 @@
 {
   "name": "rekordbox-device",
   "version": "0.1.0",
-  "description": "rekordbox Device Libraries on USB sticks and SD cards (export.pdb and the encrypted exportLibrary.db): browse them, export a collection to a device, update the collection from it, back up, convert, edit its settings.",
+  "description": "rekordbox Device Libraries on USB sticks and SD cards (export.pdb and the encrypted OneLibrary exportLibrary.db, both written on every export): browse them, export a collection to a device, update the collection from it, back up, convert, edit its settings.",
   "library": {
     "lib": {
       "linux": "librekordbox_device.so",
@@ -17,9 +17,9 @@
   "settings": [
     {
       "id": "onelibrary_key",
-      "label": "OneLibrary key",
+      "label": "OneLibrary key (optional)",
       "type": "secret",
-      "help": "SQLCipher key of exportLibrary.db. Empty: only the export.pdb library of a device is read and written."
+      "help": "SQLCipher key of exportLibrary.db (OneLibrary, formerly Device Library Plus). Empty: the built-in key, the same on every device."
     }
   ]
 }

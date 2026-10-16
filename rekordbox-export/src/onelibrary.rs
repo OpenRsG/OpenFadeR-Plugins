@@ -1,5 +1,5 @@
 //! `PIONEER/rekordbox/exportLibrary.db`: the OneLibrary database next to `export.pdb`, a SQLCipher 4 file (cipher
-//! defaults, page size 4096) whose key comes from the plugin's `onelibrary_key` setting (never stored here).
+//! defaults, page size 4096) whose key is the caller's (`rekordbox_common::onelibrary_key`).
 //!
 //! The table and index definitions are those of a real rekordbox 7 export (observed, read-only with sqlcipher; recorded in
 //! `.local/re/export/notes.md`, "OneLibrary"); `rekordbox-device`'s reader reads the same tables back. Row conventions

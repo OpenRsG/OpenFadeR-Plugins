@@ -1,0 +1,16 @@
+{
+  "name": "virtualdj",
+  "version": "0.1.0",
+  "description": "VirtualDJ database on USB sticks and hard drives: export a collection with its cues, loops, grids and playlists to the drive's own VirtualDJ/database.xml.",
+  "library": {
+    "lib": {
+      "linux": "libvirtualdj.so",
+      "windows": "virtualdj.dll",
+      "macos": "libvirtualdj.dylib"
+    },
+    "formats": [
+      "dir"
+    ],
+    "device": true
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "engine-dj",
+  "version": "0.1.0",
+  "description": "Engine DJ libraries (Engine Library/Database2/m.db) on USB sticks and SD cards, read by Denon DJ, Numark and RANE players and Engine DJ: export tracks, cues, loops, beat grids, waveforms and playlists to a device.",
+  "library": {
+    "lib": {
+      "linux": "libengine_dj.so",
+      "windows": "engine_dj.dll",
+      "macos": "libengine_dj.dylib"
+    },
+    "formats": [
+      "dir"
+    ],
+    "device": true
+  }
+}

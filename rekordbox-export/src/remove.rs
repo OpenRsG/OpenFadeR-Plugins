@@ -37,14 +37,14 @@ fn subtree(db: &Db, root: u32) -> Vec<u32> {
     out
 }
 
-/// Deletes what `target` names; `key` is the OneLibrary key (`None`: the device's OneLibrary cannot be kept in step, which
-/// is refused). A playlist goes with `delete_tracks` also taking the tracks no other playlist lists.
+/// Deletes what `target` names; `key` is the OneLibrary key. A playlist goes with `delete_tracks` also taking the tracks no
+/// other playlist lists.
 pub fn run(
     dest: &Path,
     target: &RemoveTarget,
     delete_tracks: bool,
     config: &DeviceConfig,
-    key: Option<&str>,
+    key: &str,
 ) -> Result<RemoveReport, String> {
     match target {
         RemoveTarget::Playlist { path } => {
@@ -68,7 +68,7 @@ pub fn playlist(
     node: u32,
     delete_tracks: bool,
     config: &DeviceConfig,
-    key: Option<&str>,
+    key: &str,
 ) -> Result<RemoveReport, String> {
     let (mut db, tags) = read::open(dest, config)?;
     if !db.nodes.iter().any(|n| n.id == node) {
@@ -105,7 +105,7 @@ pub fn tracks(
     dest: &Path,
     ids: &[u32],
     config: &DeviceConfig,
-    key: Option<&str>,
+    key: &str,
 ) -> Result<RemoveReport, String> {
     let (db, tags) = read::open(dest, config)?;
     finish(dest, db, tags, ids, key)
@@ -143,20 +143,19 @@ pub fn find_track(dest: &Path, file: &Path, config: &DeviceConfig) -> Result<u32
 }
 
 /// Deletes the play histories called `names` from `export.pdb` and, when the device has a OneLibrary, from it too (rows of its
-/// `history` / `history_content`; needs `key`). Nothing else is rewritten, so the OneLibrary's own content is kept as is.
+/// `history` / `history_content`; encrypted with `key`). Nothing else is rewritten, so the OneLibrary's own content is kept as is.
 /// Returns how many histories `export.pdb` lost.
 pub fn histories(
     dest: &Path,
     names: &[String],
     config: &DeviceConfig,
-    key: Option<&str>,
+    key: &str,
 ) -> Result<usize, String> {
     let (mut db, _) = read::open(dest, config)?;
     let before = db.histories.len();
     db.histories.retain(|h| !names.contains(&h.name));
     let one = dest.join(ONE);
     if one.is_file() {
-        let key = key.ok_or("this device has a OneLibrary: its key is needed to delete from it")?;
         let conn = open_keyed(&one, key)?;
         for n in names {
             at(conn.execute("delete from history_content where history_id in (select history_id from history where name = ?1)", [n]), &one)?;
@@ -175,7 +174,7 @@ fn finish(
     mut db: Db,
     mut tags: Tags,
     ids: &[u32],
-    key: Option<&str>,
+    key: &str,
 ) -> Result<RemoveReport, String> {
     let gone: HashSet<u32> = ids.iter().copied().collect();
     let (removed, kept): (Vec<_>, Vec<_>) = std::mem::take(&mut db.tracks)

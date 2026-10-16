@@ -7,7 +7,7 @@
 //! ```text
 //! PIONEER/rekordbox/export.pdb        DeviceSQL: tracks, artists, albums, genres, keys, colors, playlist tree + entries, histories, columns
 //! PIONEER/rekordbox/exportExt.pdb     MyTag (only when there is MyTag)
-//! PIONEER/rekordbox/exportLibrary.db  OneLibrary (SQLCipher; only when the plugin's `onelibrary_key` setting is set)
+//! PIONEER/rekordbox/exportLibrary.db  OneLibrary (SQLCipher; the built-in key, or the plugin's `onelibrary_key` setting)
 //! PIONEER/USBANLZ/P<xxx>/<8 hex>/ANLZ0000.{DAT,EXT,2EX}   grid, cues, waveforms of each track
 //! PIONEER/Artwork/<00001>/{a,b}<n>.jpg   covers (the file itself, no thumbnail resizing; `a` for export.pdb, `b` for OneLibrary)
 //! PIONEER/{MYSETTING,MYSETTING2,DJMMYSETTING,DEVSETTING}.DAT   device settings
@@ -49,7 +49,7 @@ use openfader_plugin::library::{
 };
 use pdb::db::{Db, Tags};
 use progress::Progress;
-use rekordbox_common::{at, setting};
+use rekordbox_common::at;
 use rusqlite::{Connection, OpenFlags};
 use serde_json::Value;
 use settings::DeviceConfig;
@@ -128,34 +128,14 @@ fn put_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     at(std::fs::rename(&tmp, path), path)
 }
 
-/// A file or folder name: characters FAT and rekordbox reject become `_`; empty → `fallback`.
-pub fn clean(s: &str, fallback: &str) -> String {
-    let s: String = s
-        .chars()
-        .map(|c| {
-            if c.is_control() || "/\\:*?\"<>|".contains(c) {
-                '_'
-            } else {
-                c
-            }
-        })
-        .take(120)
-        .collect();
-    let s = s.trim().trim_end_matches('.');
-    if s.is_empty() {
-        fallback.into()
-    } else {
-        s.into()
-    }
-}
+/// A file or folder name: characters FAT and rekordbox reject become `_`; empty → `fallback` (the SDK's rule, shared by every
+/// device format so they find each other's audio copies).
+pub use openfader_plugin::library::clean_name as clean;
 
 /// Today's local date as `YYYY-MM-DD`.
 fn today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
-
-/// The text of the error for a device that holds a OneLibrary while the plugin has no key for it.
-const NEEDS_KEY: &str = "holds a OneLibrary: set the plugin's OneLibrary key so it is updated too";
 
 /// Builds a new `exportLibrary.db` next to `one` from `db` and `tags`, lets `then` add to it, and renames it over `one`; the
 /// temporary file is removed when any step fails. The library id is kept from an existing `one`.
@@ -179,33 +159,27 @@ fn rebuild_onelibrary(
         .inspect_err(|_| drop(std::fs::remove_file(&tmp)))
 }
 
-/// Writes the library files of `dest` from `db` and `tags`: `exportLibrary.db` (when `key` is given; an existing one hands its
+/// Writes the library files of `dest` from `db` and `tags`: `exportLibrary.db` (encrypted with `key`; an existing one hands its
 /// histories and cue rows over, see `carry`), `exportExt.pdb` (when there is MyTag or one existed) and, last, `export.pdb`.
-/// Returns whether the OneLibrary was written.
-fn commit(dest: &Path, db: &Db, tags: &Tags, key: Option<&str>) -> Result<bool, String> {
+fn commit(dest: &Path, db: &Db, tags: &Tags, key: &str) -> Result<(), String> {
     let (one, ext) = (dest.join(ONE), dest.join(EXT));
-    if let Some(key) = key {
-        rebuild_onelibrary(&one, key, db, tags, |tmp| {
-            let carried = if one.is_file() {
-                carry::carry(&one, tmp, key)
-            } else {
-                carry::histories(tmp, key, db)
-            };
-            carried.and_then(|()| bank::apply(tmp, key, &db.banks))
-        })?;
-    } else if one.is_file() {
-        return Err(format!("{} {NEEDS_KEY}", dest.display()));
-    }
+    rebuild_onelibrary(&one, key, db, tags, |tmp| {
+        let carried = if one.is_file() {
+            carry::carry(&one, tmp, key)
+        } else {
+            carry::histories(tmp, key, db)
+        };
+        carried.and_then(|()| bank::apply(tmp, key, &db.banks))
+    })?;
     if !tags.categories.is_empty() || ext.is_file() {
         put_atomic(&ext, &tags.encode()?)?;
     }
-    put_atomic(&dest.join(PDB), &db.encode()?)?;
-    Ok(key.is_some())
+    put_atomic(&dest.join(PDB), &db.encode()?)
 }
 
-/// The OneLibrary key of the plugin's settings.
-fn key(settings: &Value) -> Option<String> {
-    setting(settings, "onelibrary_key")
+/// The OneLibrary key: the plugin's setting, else the built-in one, so both libraries are always written.
+fn key(settings: &Value) -> String {
+    rekordbox_common::onelibrary_key(settings)
 }
 
 /// What the plugin does with a device root: its libraries, whether it can write, the convert action, the files to read ahead and
@@ -259,19 +233,7 @@ pub fn export(
     let key = key(settings);
     let config = DeviceConfig::from_values(&options.config);
     let mut progress = Progress::new();
-    let (mut report, ids) = run::run(
-        root,
-        snapshot,
-        options,
-        &config,
-        key.as_deref(),
-        &mut progress,
-    )?;
-    if key.is_none() {
-        report
-            .notes
-            .push("no OneLibrary written: key not set".into());
-    }
+    let (mut report, ids) = run::run(root, snapshot, options, &config, &key, &mut progress)?;
     match update::baselines(root, &ids, snapshot, &mut progress) {
         Ok(b) => report.baselines = b,
         Err(e) => report.warnings.push(format!("baselines not recorded: {e}")),
@@ -306,7 +268,7 @@ pub fn remove(
         target,
         delete_tracks,
         &DeviceConfig::from_values(config),
-        key(settings).as_deref(),
+        &key(settings),
     )
 }
 
@@ -321,7 +283,7 @@ pub fn device_action(
     match action {
         convert::ID => convert::to_onelibrary(
             root,
-            key(settings).as_deref(),
+            &key(settings),
             confirmed,
             &DeviceConfig::from_values(config),
         ),

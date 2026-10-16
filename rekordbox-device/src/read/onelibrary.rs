@@ -1,5 +1,5 @@
 //! Read-only access to a USB/SD "OneLibrary" export (`PIONEER/rekordbox/exportLibrary.db`), a
-//! SQLCipher 4 database. Its key is not the `master.db` key: it is the plugin's `onelibrary_key` setting.
+//! SQLCipher 4 database. Its key is not the `master.db` key: it is `rekordbox_common::onelibrary_key`.
 //! Table/column names observed in a real export
 //! (including `key(key_id, name)` holding Camelot names like "10A" and `genre(genre_id, name)`,
 //! both joined from `content.key_id` / `content.genre_id`, and `album(album_id, name, artist_id, image_id,

@@ -19,7 +19,11 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 | Plugin | Kind |
 |---|---|
 | `rekordbox-xml` | library: reads and writes a rekordbox XML collection |
-| `rekordbox-device` | library + device: rekordbox Device Library (`export.pdb`, ANLZ files) and OneLibrary (`exportLibrary.db`, key as a setting) on USB sticks and SD cards: read, export, update, remove, convert, player settings, backups |
+| `rekordbox-device` | library + device: rekordbox Device Library (`export.pdb`, ANLZ files) and OneLibrary (`exportLibrary.db`, built-in key), both written on every export, on USB sticks and SD cards: read, export, update, remove, convert, player settings, backups |
+| `engine-dj` | device: Engine DJ library (`Engine Library/Database2/m.db`, schema 3.0.0: tracks, grid, hot cues, loops, waveform overview, playlists) for Denon DJ, Numark and RANE players and Engine DJ |
+| `serato` | device: Serato DJ library (`_Serato_/database V2`, crates; cues, loops, colour and grid in the audio tags; a private copy only when the tags do not fit the shared file) |
+| `virtualdj` | device: VirtualDJ drive database (`VirtualDJ/database.xml`: tags, grid, hot cues, memory cues, loops; lists in `VirtualDJ/MyLists`) |
+| `traktor` | device: Traktor collection (`Traktor/collection.nml`, NML 19: tags, grid, hot and memory cues, loops, playlists), merged into an existing one, for Traktor's Import another Collection |
 | `rekordbox-db` | library: the rekordbox desktop collection (`master.db`, smart playlists; key and path map as settings) |
 | `itunes` | library: an iTunes / Music `Library.xml` |
 | `sample-pack` | library: sampler packs (`.spp`) |
@@ -28,6 +32,10 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 | `center-lock`, `gate-cue` | knob and pad modes (JSON) |
 | `now-playing`, `mix-log` | events, actions, settings (Python, Lua) |
 | `yt-dlp` | track sources: YouTube / SoundCloud search, playlists and downloads (Python, needs `yt-dlp`) |
+
+### One stick for every player and app
+
+The five device plugins write side by side on the same stick and share one copy of each audio file (`Contents/<artist>/<album>/<file>`). In the app's device window, the FORMATS chips pick which ones an export or a sync writes. By default these are the formats already on the stick, or all of them on an empty stick. A stick written by rekordbox is extended, not duplicated, because its audio files are found by name and size. None of the four new formats has been tried on real hardware or in the vendor apps yet: please report what does not load.
 
 ## Build from source
 

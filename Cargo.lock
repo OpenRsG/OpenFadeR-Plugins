@@ -78,6 +78,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "engine-dj"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "flate2",
+ "openfader-plugin",
+ "rusqlite",
+ "serde_json",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -421,6 +432,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serato"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "openfader-plugin",
+ "serde_json",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -542,6 +562,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "traktor"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "openfader-plugin",
+ "serde_json",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -552,6 +581,15 @@ name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
+
+[[package]]
+name = "virtualdj"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "openfader-plugin",
+ "serde_json",
+]
 
 [[package]]
 name = "wasm-bindgen"

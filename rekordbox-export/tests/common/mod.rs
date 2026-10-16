@@ -199,7 +199,7 @@ pub fn cancel() {
     CANCEL.set(true);
 }
 
-/// The plugin's settings holding `key` as the OneLibrary key.
+/// The plugin's settings holding `key` as the OneLibrary key (`None`: no setting, so the built-in key).
 pub fn settings(key: Option<&str>) -> Value {
     key.map_or(Value::Null, |k| json!({ "onelibrary_key": k }))
 }

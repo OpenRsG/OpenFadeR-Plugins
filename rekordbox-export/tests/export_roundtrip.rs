@@ -182,13 +182,8 @@ fn export_reads_back_through_our_readers() {
     let (d, snap) = setup("rt");
     let report = export(&d.dest, &snap, &ExportOptions::default(), None).unwrap();
     assert!(
-        !d.dest.join("PIONEER/rekordbox/exportLibrary.db").exists(),
-        "no key, no OneLibrary"
-    );
-    assert!(
-        report.notes.iter().any(|n| n.contains("no OneLibrary")),
-        "{:?}",
-        report.notes
+        d.dest.join("PIONEER/rekordbox/exportLibrary.db").is_file(),
+        "the built-in key writes the OneLibrary too"
     );
     assert_eq!((report.tracks, report.playlists), (2, 3));
     assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
@@ -336,7 +331,7 @@ fn one_playlist_scope_exports_only_its_tracks() {
     assert_eq!((db.tracks.len(), db.nodes.len()), (1, 1));
 }
 
-/// With a key the export also writes `exportLibrary.db`, which must say what `export.pdb` says (the real-USB twin of this
+/// The export writes `exportLibrary.db` (here with an explicit key), which must say what `export.pdb` says (the real-USB twin of this
 /// check is in `export_usb.rs`), plus the snapshot's colour and MyTag, the `b` cover copy, the settings files and a PQT2 in the
 /// EXT file.
 #[test]
@@ -487,13 +482,4 @@ fn onelibrary_matches_export_pdb_and_carries_snapshot_data() {
         u32::from_be_bytes(ext[at + 40..at + 44].try_into().unwrap()) as usize,
         grid(24).len()
     );
-}
-
-/// An export without a key refuses a device whose OneLibrary it could not keep in step.
-#[test]
-fn a_device_with_a_onelibrary_needs_the_key() {
-    let (d, snap) = setup("needskey");
-    export(&d.dest, &snap, &ExportOptions::default(), Some("test-key")).unwrap();
-    let err = export(&d.dest, &snap, &ExportOptions::default(), None).unwrap_err();
-    assert!(err.contains("OneLibrary") && err.contains("key"), "{err}");
 }

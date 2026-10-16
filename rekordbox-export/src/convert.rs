@@ -20,11 +20,10 @@ const EXISTS: &str = "OneLibrary already exists in the device. Do you want to ov
 /// An existing one is replaced only when `confirmed` (else the answer is a [`Confirm`]). Artwork gets its `b` copy where missing.
 pub fn to_onelibrary(
     dest: &Path,
-    key: Option<&str>,
+    key: &str,
     confirmed: bool,
     config: &DeviceConfig,
 ) -> Result<ActionAnswer, String> {
-    let key = key.ok_or("converting needs the OneLibrary key: set it in the plugin's settings")?;
     let one = dest.join(ONE);
     if one.is_file() && !confirmed {
         return Ok(ActionAnswer {

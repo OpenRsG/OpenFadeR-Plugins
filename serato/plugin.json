@@ -1,0 +1,16 @@
+{
+  "name": "serato",
+  "version": "0.1.0",
+  "description": "Serato DJ library on USB sticks and SD cards: database V2, crates, and cues, loops, colour and beat grid in the audio file tags, sharing the audio of the other formats on the stick.",
+  "library": {
+    "lib": {
+      "linux": "libserato.so",
+      "windows": "serato.dll",
+      "macos": "libserato.dylib"
+    },
+    "formats": [
+      "dir"
+    ],
+    "device": true
+  }
+}
