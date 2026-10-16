@@ -269,7 +269,11 @@ fn desktop_paths_and_damaged_chains() {
         all[0].file.as_deref(),
         Some(d.stick().parent().unwrap().join("Music/y.mp3").as_path())
     );
-    assert_eq!(all[1].file.as_deref(), Some(Path::new("/abs/b.wav")));
+    // A rooted path stays as it is (on Windows on the library's drive).
+    assert_eq!(
+        all[1].file.as_deref(),
+        Some(d.stick().join("/abs/b.wav").as_path())
+    );
     let foreign = &all[2];
     assert_eq!(
         (
