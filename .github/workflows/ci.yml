@@ -1,17 +1,23 @@
 name: CI
 
 # Push / pull request: build and test the plugins inside a core checkout (they build against its sdk/).
-# Tag v*: build on Linux, Windows and macOS and attach <plugin>-<os>-<arch>.zip to the release: the prebuilt libraries the
-# app's one-click install downloads (releases/latest/download/...).
+# Tag v* (or a manual run naming a tag): build on Linux, Windows and macOS (arm64, and x86_64 cross-compiled on the arm64 runner) and
+# attach <plugin>-<os>-<arch>.zip to that release: the prebuilt libraries the app's one-click install downloads
+# (releases/latest/download/...).
 on:
   push:
     branches: [main]
     tags: ["v*"]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to attach the zips to"
+        required: true
 
 jobs:
   test:
-    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,13 +35,17 @@ jobs:
       - run: cargo test --release --manifest-path core/extension/plugin/Cargo.toml
 
   release:
-    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest, macos-13]
+        include:
+          - { os: ubuntu-latest }
+          - { os: windows-latest }
+          - { os: macos-latest }
+          - { os: macos-latest, target: x86_64-apple-darwin, arch: x86_64 }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -52,8 +62,15 @@ jobs:
         with:
           python-version: "3.x"
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - run: core/extension/plugin/build.sh
+        env:
+          CARGO_BUILD_TARGET: ${{ matrix.target }}
       - run: python core/extension/plugin/package.py
+        env:
+          PACKAGE_ARCH: ${{ matrix.arch }}
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: core/extension/plugin/dist/*.zip

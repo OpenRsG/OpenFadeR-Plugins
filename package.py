@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Packs each native plugin's built library (after build.sh) as dist/<plugin>-<os>-<arch>.zip, the release asset the app's
-one-click install downloads (<os>, <arch> as Rust's std::env::consts::OS / ARCH: linux|windows|macos, x86_64|aarch64)."""
-import json, pathlib, platform, sys, zipfile
+one-click install downloads (<os>, <arch> as Rust's std::env::consts::OS / ARCH: linux|windows|macos, x86_64|aarch64).
+PACKAGE_ARCH overrides the arch of the running machine (a cross-compiled build)."""
+import json, os, pathlib, platform, sys, zipfile
 
 OS = {"linux": "linux", "win32": "windows", "darwin": "macos"}[sys.platform]
-ARCH = {"amd64": "x86_64", "x86_64": "x86_64", "arm64": "aarch64", "aarch64": "aarch64"}[platform.machine().lower()]
+ARCH = {"amd64": "x86_64", "x86_64": "x86_64", "arm64": "aarch64", "aarch64": "aarch64"}[(os.environ.get("PACKAGE_ARCH") or platform.machine()).lower()]
 root = pathlib.Path(__file__).resolve().parent
 dist = root / "dist"
 dist.mkdir(exist_ok=True)
