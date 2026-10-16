@@ -840,13 +840,13 @@ fn another_schema_version_is_refused_untouched() {
         let c = Connection::open(&db).unwrap();
         c.execute_batch(
             "CREATE TABLE Information (id INTEGER PRIMARY KEY, uuid TEXT, schemaVersionMajor INTEGER, schemaVersionMinor INTEGER, \
-             schemaVersionPatch INTEGER); INSERT INTO Information VALUES (1, 'x', 3, 0, 1);",
+             schemaVersionPatch INTEGER); INSERT INTO Information VALUES (1, 'x', 3, 1, 0);",
         )
         .unwrap();
     }
     let bytes = std::fs::read(&db).unwrap();
     let err = export(&d, &setup(&d)).unwrap_err();
-    assert!(err.contains("3.0.1") && err.contains("3.0.0"), "{err}");
+    assert!(err.contains("3.1.0") && err.contains("3.0.2"), "{err}");
     assert_eq!(
         std::fs::read(&db).unwrap(),
         bytes,
@@ -861,6 +861,264 @@ fn another_schema_version_is_refused_untouched() {
     std::fs::write(&db, b"not a database").unwrap();
     assert!(export(&d, &setup(&d)).is_err());
     assert_eq!(std::fs::read(&db).unwrap(), b"not a database");
+}
+
+fn export_schema(
+    d: &Dirs,
+    snap: &Snapshot,
+    schema: &str,
+) -> Result<openfader_plugin::library::ExportReport, String> {
+    let mut options = ExportOptions::default();
+    options
+        .config
+        .insert(engine_dj::SCHEMA_OPTION.into(), schema.into());
+    engine_dj::Plugin::export(&d.stick(), snap, &options, &Value::Null)
+}
+
+fn version(c: &Connection) -> (i64, i64, i64) {
+    c.query_row(
+        "SELECT schemaVersionMajor, schemaVersionMinor, schemaVersionPatch FROM Information",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )
+    .unwrap()
+}
+
+/// Makes the library of the stick look like one another Engine release wrote: `sql` adds what that schema has more, `v` is its version.
+fn relabel(d: &Dirs, v: (i64, i64, i64), sql: &str) {
+    let c = Connection::open(database(&d.stick())).unwrap();
+    c.execute_batch(sql).unwrap();
+    c.execute(
+        "UPDATE Information SET schemaVersionMajor = ?1, schemaVersionMinor = ?2, schemaVersionPatch = ?3",
+        params![v.0, v.1, v.2],
+    )
+    .unwrap();
+}
+
+fn count(c: &Connection, sql: &str) -> i64 {
+    c.query_row(sql, [], |r| r.get(0)).unwrap()
+}
+
+/// A only, as an earlier export left it.
+fn first_export(d: &Dirs) -> Snapshot {
+    let snap = setup(d);
+    export(
+        d,
+        &Snapshot {
+            tracks: vec![snap.tracks[0].clone()],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    snap
+}
+
+#[test]
+fn libraries_of_engine_4_3_and_later_are_extended_in_place() {
+    // 3.0.1 only changes triggers; 3.0.2 adds the album art source hash column, which stays NULL.
+    for (patch, sql) in [
+        (1, ""),
+        (
+            2,
+            "ALTER TABLE Track ADD COLUMN albumArtSourceHash CHAR(40);",
+        ),
+    ] {
+        let d = Dirs::new(&format!("v30{patch}"));
+        let snap = first_export(&d);
+        relabel(&d, (3, 0, patch), sql);
+        let report = export(&d, &snap).unwrap();
+        assert_eq!(
+            (report.added, report.updated),
+            (1, 1),
+            "B added, A refreshed"
+        );
+
+        let c = open(&d.stick());
+        assert_eq!(version(&c), (3, 0, patch), "the library keeps its version");
+        assert_eq!(count(&c, "SELECT COUNT(*) FROM Track"), 2);
+        let a = id_of(&c, "Alpha é");
+        assert!(blob(&c, a, "beatData").is_some() && blob(&c, a, "quickCues").is_some());
+        assert_eq!(ids(&c, "Warm"), vec![a, id_of(&c, "Beta")]);
+        if patch == 2 {
+            assert_eq!(
+                count(
+                    &c,
+                    "SELECT COUNT(*) FROM Track WHERE albumArtSourceHash IS NOT NULL"
+                ),
+                0
+            );
+        }
+        assert_eq!(
+            c.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+                .unwrap(),
+            "ok"
+        );
+    }
+}
+
+#[test]
+fn engine_2_schema_keeps_the_analysis_in_track() {
+    let d = Dirs::new("v2");
+    let snap = setup(&d);
+    let report = export_schema(&d, &snap, "2.18.0").unwrap();
+    assert_eq!((report.added, report.playlists), (2, 3));
+
+    let c = open(&d.stick());
+    assert_eq!(version(&c), (2, 18, 0));
+    assert_eq!(
+        c.query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+            .unwrap(),
+        "ok"
+    );
+    // 2.18.0: PerformanceData is a view over Track, and Track has neither activeOnLoadLoops nor lastEditTime.
+    assert_eq!(
+        c.query_row(
+            "SELECT type FROM sqlite_master WHERE name = 'PerformanceData'",
+            [],
+            |r| r.get::<_, String>(0)
+        )
+        .unwrap(),
+        "view"
+    );
+    assert_eq!(
+        count(&c, "SELECT COUNT(*) FROM pragma_table_info('Track') WHERE name IN ('activeOnLoadLoops', 'lastEditTime')"),
+        0
+    );
+    assert_eq!(count(&c, "SELECT COUNT(*) FROM AlbumArt WHERE id = 1"), 1);
+
+    // The blobs are columns of Track, and they decode as in the 3.x library.
+    let a = id_of(&c, "Alpha é");
+    let direct = |col: &str| -> Option<Vec<u8>> {
+        c.query_row(
+            &format!("SELECT {col} FROM Track WHERE id = ?1"),
+            [a],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    for col in [
+        "trackData",
+        "overviewWaveFormData",
+        "beatData",
+        "quickCues",
+        "loops",
+    ] {
+        assert!(direct(col).is_some(), "{col}");
+        assert_eq!(direct(col), blob(&c, a, col), "{col} through the view");
+    }
+    assert_eq!(
+        read_track_data(&direct("trackData").unwrap()),
+        (f64::from(RATE), 12 * i64::from(RATE), 1)
+    );
+    let (rate, samples, set, grid) = read_beats(&direct("beatData").unwrap());
+    assert_eq!(
+        (rate, samples, set, grid.len()),
+        (f64::from(RATE), 12.0 * f64::from(RATE), 1, 3)
+    );
+    let (cues, main) = read_quick_cues(&direct("quickCues").unwrap());
+    assert_eq!(cues[0].0, "Drop é");
+    assert_eq!(cues[0].1, 750.0 * f64::from(RATE) / 1000.0);
+    assert_eq!(main.1, 1);
+    assert_eq!(read_loops(&direct("loops").unwrap())[0].0, "Loop");
+    assert_eq!(
+        read_overview(&direct("overviewWaveFormData").unwrap())
+            .1
+            .len(),
+        1024
+    );
+    assert_eq!(
+        count(&c, &format!("SELECT isAnalyzed FROM Track WHERE id = {a}")),
+        1
+    );
+
+    // The unanalysed track and the lists.
+    let b = id_of(&c, "Beta");
+    assert_eq!(
+        count(&c, &format!("SELECT isAnalyzed FROM Track WHERE id = {b}")),
+        0
+    );
+    assert!(blob(&c, b, "beatData").is_none() && blob(&c, b, "quickCues").is_none());
+    assert_eq!(ids(&c, "Warm"), vec![a, b]);
+    assert_eq!(ids(&c, "Top"), vec![b, a]);
+    drop(c);
+
+    // A later export, with the default option, extends it and keeps 2.18.0.
+    let delta = track(&d, "d.wav", "Delta", "Other", 3);
+    let report = export(
+        &d,
+        &Snapshot {
+            tracks: vec![(delta.clone(), None)],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!((report.added, report.updated), (1, 0));
+    assert!(
+        report.notes.iter().all(|n| !n.contains("schema")),
+        "{:?}",
+        report.notes
+    );
+    let c = open(&d.stick());
+    assert_eq!(version(&c), (2, 18, 0));
+    assert_eq!(count(&c, "SELECT COUNT(*) FROM Track"), 3);
+    drop(c);
+
+    // The same library relabelled as 2.20.3 (which has lastEditTime): a new track gets one.
+    relabel(
+        &d,
+        (2, 20, 3),
+        "ALTER TABLE Track ADD COLUMN activeOnLoadLoops INTEGER; ALTER TABLE Track ADD COLUMN lastEditTime DATETIME;",
+    );
+    let echo = track(&d, "e.wav", "Echo", "Other", 3);
+    export(
+        &d,
+        &Snapshot {
+            tracks: vec![(echo, Some(analysis()))],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let c = open(&d.stick());
+    assert_eq!(version(&c), (2, 20, 3));
+    let e = id_of(&c, "Echo");
+    assert!(
+        count(
+            &c,
+            &format!("SELECT lastEditTime FROM Track WHERE id = {e}")
+        ) > 1_700_000_000
+    );
+    assert!(blob(&c, e, "beatData").is_some());
+}
+
+#[test]
+fn the_schema_option_only_decides_a_new_library() {
+    let d = Dirs::new("option");
+    let snap = setup(&d);
+    let err = export_schema(&d, &snap, "2.20.3").unwrap_err();
+    assert!(
+        err.contains(engine_dj::SCHEMA_OPTION) && err.contains("2.20.3"),
+        "{err}"
+    );
+    assert!(
+        !d.stick().join("Contents").exists() && !d.stick().join("Engine Library").exists(),
+        "nothing copied or created"
+    );
+
+    export(&d, &snap).unwrap();
+    let report = export_schema(&d, &snap, "2.18.0").unwrap();
+    assert_eq!(
+        version(&open(&d.stick())),
+        (3, 0, 0),
+        "an existing library is not converted"
+    );
+    assert!(
+        report
+            .notes
+            .iter()
+            .any(|n| n.contains("3.0.0") && n.contains("2.18.0")),
+        "{:?}",
+        report.notes
+    );
 }
 
 #[test]
@@ -897,6 +1155,22 @@ fn device_probe_reports_the_library() {
     let some = engine_dj::Plugin::device_probe(&d.stick(), &Value::Null).unwrap();
     assert_eq!(some.libraries, ["Engine Library"]);
     assert!(some.modified.is_some_and(|t| t > 1_700_000_000));
+    assert_eq!(some.title, "Engine DJ");
+    assert!(
+        !some.about.is_empty() && some.about.len() < 140,
+        "{}",
+        some.about
+    );
+    let [field] = &some.options[..] else {
+        panic!("one option")
+    };
+    let openfader_plugin::library::FieldKind::Choice { choices, .. } = &field.kind else {
+        panic!("a choice")
+    };
+    assert_eq!(field.key, engine_dj::SCHEMA_OPTION);
+    assert_eq!(field.default, "3.0.0");
+    let values: Vec<&str> = choices.iter().map(|c| c.value.as_str()).collect();
+    assert_eq!(values, ["3.0.0", "2.18.0"]);
 }
 
 /// 128 BPM with beat times rounded to whole ms, as the host stores them: the grid stays at a few markers and no beat is further

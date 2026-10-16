@@ -20,6 +20,8 @@ pub struct Placed<'a> {
     pub file: &'a Path,
     /// Sample rate, 0 when unknown (no cue, grid or waveform is written then).
     pub rate: u32,
+    /// The schema has `Track.lastEditTime` ([`crate::schema::has_edit_time`]): set on a new row.
+    pub edit_time: bool,
 }
 
 /// Which parts of the performance data of a track were written, for the report.
@@ -118,9 +120,9 @@ pub fn upsert(tx: &Transaction, uuid: &str, p: &Placed) -> rusqlite::Result<(i64
                  album, genre, comment, label, composer, remixer, key, rating, isPlayed, fileType, isAnalyzed, dateCreated, \
                  dateAdded, isAvailable, isMetadataOfPackedTrackChanged, isPerfomanceDataOfPackedTrackChanged, \
                  isMetadataImported, pdbImportKey, isBeatGridLocked, originDatabaseUuid, originTrackId, streamingFlags, \
-                 explicitLyrics, lastEditTime) \
+                 explicitLyrics) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?8, ?9, ?10, ?11, ?12, ?13, '', '', ?14, ?15, 0, ?16, 0, ?17, ?18, \
-                 1, 0, 0, 1, 0, 0, ?19, 0, 0, 0, ?20)",
+                 1, 0, 0, 1, 0, 0, ?19, 0, 0, 0)",
                 params![
                     t.length_s,
                     bpm,
@@ -140,11 +142,17 @@ pub fn upsert(tx: &Transaction, uuid: &str, p: &Placed) -> rusqlite::Result<(i64
                     file_type,
                     mtime(p.file),
                     date_added(&t.date_added),
-                    uuid,
-                    now()
+                    uuid
                 ],
             )?;
-            tx.last_insert_rowid()
+            let id = tx.last_insert_rowid();
+            if p.edit_time {
+                tx.execute(
+                    "UPDATE Track SET lastEditTime = ?2 WHERE id = ?1",
+                    params![id, now()],
+                )?;
+            }
+            id
         }
     };
     let mut w = performance(tx, id, p, key)?;

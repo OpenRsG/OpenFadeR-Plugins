@@ -1,7 +1,7 @@
 {
   "name": "rekordbox-device",
   "version": "0.1.0",
-  "description": "rekordbox Device Libraries on USB sticks and SD cards (export.pdb and the encrypted OneLibrary exportLibrary.db, both written on every export): browse them, export a collection to a device, update the collection from it, back up, convert, edit its settings.",
+  "description": "rekordbox Device Libraries on USB sticks and SD cards (export.pdb for rekordbox 5 to 7 and every CDJ / XDJ, and the encrypted OneLibrary exportLibrary.db for rekordbox 7 and the newest players, a per-device option): browse them, export a collection to a device, update the collection from it, back up, convert, edit its settings.",
   "library": {
     "lib": {
       "linux": "librekordbox_device.so",

@@ -7,7 +7,8 @@
 //! ```text
 //! PIONEER/rekordbox/export.pdb        DeviceSQL: tracks, artists, albums, genres, keys, colors, playlist tree + entries, histories, columns
 //! PIONEER/rekordbox/exportExt.pdb     MyTag (only when there is MyTag)
-//! PIONEER/rekordbox/exportLibrary.db  OneLibrary (SQLCipher; the built-in key, or the plugin's `onelibrary_key` setting)
+//! PIONEER/rekordbox/exportLibrary.db  OneLibrary (SQLCipher; the built-in key, or the plugin's `onelibrary_key` setting);
+//!                                     left out of a new library when the device option [`ONE_OPTION`] is off
 //! PIONEER/USBANLZ/P<xxx>/<8 hex>/ANLZ0000.{DAT,EXT,2EX}   grid, cues, waveforms of each track
 //! PIONEER/Artwork/<00001>/{a,b}<n>.jpg   covers (the file itself, no thumbnail resizing; `a` for export.pdb, `b` for OneLibrary)
 //! PIONEER/{MYSETTING,MYSETTING2,DJMMYSETTING,DEVSETTING}.DAT   device settings
@@ -45,7 +46,7 @@ pub use settings::{read as settings_read, schema as settings_schema, write as se
 
 use openfader_plugin::library::{
     ActionAnswer, BackupTrack, DeviceAction, DeviceInfo, ExportOptions, ExportReport, Feature,
-    RemoveReport, RemoveTarget, Snapshot, UpdateReport,
+    Field, FieldKind, RemoveReport, RemoveTarget, Scope, Snapshot, UpdateReport,
 };
 use pdb::db::{Db, Tags};
 use progress::Progress;
@@ -62,6 +63,14 @@ pub const PDB: &str = "PIONEER/rekordbox/export.pdb";
 pub const EXT: &str = "PIONEER/rekordbox/exportExt.pdb";
 /// `PIONEER/rekordbox/exportLibrary.db` (OneLibrary).
 pub const ONE: &str = "PIONEER/rekordbox/exportLibrary.db";
+/// Device option: `0` leaves OneLibrary out of a device that holds none (a device that holds one keeps it up to date, so the
+/// two libraries never disagree). Default `1`.
+pub const ONE_OPTION: &str = "rekordbox.onelibrary";
+
+/// Whether an export writes OneLibrary to a device that has none, from the device's `config`.
+pub fn wants_onelibrary(config: &BTreeMap<String, String>) -> bool {
+    config.get(ONE_OPTION).is_none_or(|v| v != "0")
+}
 
 /// Ids by name in order of first use; the empty name is id 0 (= none). Shared by the DeviceSQL and OneLibrary writers.
 #[derive(Default)]
@@ -160,17 +169,20 @@ fn rebuild_onelibrary(
 }
 
 /// Writes the library files of `dest` from `db` and `tags`: `exportLibrary.db` (encrypted with `key`; an existing one hands its
-/// histories and cue rows over, see `carry`), `exportExt.pdb` (when there is MyTag or one existed) and, last, `export.pdb`.
-fn commit(dest: &Path, db: &Db, tags: &Tags, key: &str) -> Result<(), String> {
+/// histories and cue rows over, see `carry`) when one is there or `new_one`, `exportExt.pdb` (when there is MyTag or one
+/// existed) and, last, `export.pdb`.
+fn commit(dest: &Path, db: &Db, tags: &Tags, key: &str, new_one: bool) -> Result<(), String> {
     let (one, ext) = (dest.join(ONE), dest.join(EXT));
-    rebuild_onelibrary(&one, key, db, tags, |tmp| {
-        let carried = if one.is_file() {
-            carry::carry(&one, tmp, key)
-        } else {
-            carry::histories(tmp, key, db)
-        };
-        carried.and_then(|()| bank::apply(tmp, key, &db.banks))
-    })?;
+    if new_one || one.is_file() {
+        rebuild_onelibrary(&one, key, db, tags, |tmp| {
+            let carried = if one.is_file() {
+                carry::carry(&one, tmp, key)
+            } else {
+                carry::histories(tmp, key, db)
+            };
+            carried.and_then(|()| bank::apply(tmp, key, &db.banks))
+        })?;
+    }
     if !tags.categories.is_empty() || ext.is_file() {
         put_atomic(&ext, &tags.encode()?)?;
     }
@@ -192,6 +204,20 @@ pub fn device_probe(root: &Path, _settings: &Value) -> Result<DeviceInfo, String
         Some(m.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64)
     });
     Ok(DeviceInfo {
+        title: "rekordbox".into(),
+        about: "rekordbox 5, 6 and 7 and every CDJ / XDJ player read the Device Library; OneLibrary adds djay Pro, VirtualDJ, \
+                CDJ-3000X, OPUS-QUAD, OMNIS-DUO and XDJ-AZ"
+            .into(),
+        options: vec![Field {
+            key: ONE_OPTION.into(),
+            label: "OneLibrary".into(),
+            hint: "Also write OneLibrary (formerly Device Library Plus), which rekordbox 7 and the newest players read. A \
+                   device that holds one keeps it up to date either way."
+                .into(),
+            default: "1".into(),
+            scope: Scope::Device,
+            kind: FieldKind::Bool,
+        }],
         libraries: libs
             .iter()
             .filter(|(_, f)| found(f))

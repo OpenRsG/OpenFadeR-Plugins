@@ -188,7 +188,7 @@ fn finish(
         h.tracks.retain(|t| !gone.contains(t));
     }
     tags.assigned.retain(|(t, ..)| !gone.contains(t));
-    commit(dest, &db, &tags, key)?;
+    commit(dest, &db, &tags, key, false)?;
 
     let mut r = RemoveReport {
         tracks: removed.len(),

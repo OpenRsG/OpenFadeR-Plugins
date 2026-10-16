@@ -177,6 +177,26 @@ fn in_playlist(db: &Db, name: &str) -> Vec<String> {
         .collect()
 }
 
+/// With the OneLibrary option off a device without one gets the Device Library only; once a device holds a OneLibrary it is
+/// kept up to date whatever the option says, so the two libraries never list different tracks.
+#[test]
+fn the_onelibrary_option_leaves_it_out_of_a_new_library_only() {
+    let (d, snap) = setup("one-off");
+    let off = ExportOptions {
+        config: [(rekordbox_export::ONE_OPTION.to_owned(), "0".to_owned())].into(),
+        ..ExportOptions::default()
+    };
+    let one = d.dest.join("PIONEER/rekordbox/exportLibrary.db");
+    export(&d.dest, &snap, &off, None).unwrap();
+    assert!(d.dest.join("PIONEER/rekordbox/export.pdb").is_file() && !one.exists());
+    export(&d.dest, &snap, &ExportOptions::default(), None).unwrap();
+    assert!(one.is_file());
+    let before = std::fs::metadata(&one).unwrap().modified().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    export(&d.dest, &snap, &off, None).unwrap();
+    assert!(std::fs::metadata(&one).unwrap().modified().unwrap() > before);
+}
+
 #[test]
 fn export_reads_back_through_our_readers() {
     let (d, snap) = setup("rt");

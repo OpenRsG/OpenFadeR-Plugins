@@ -8,7 +8,7 @@
 //! |---|---|
 //! | `Contents/<artist>/<album>/<file>` | the audio, one copy shared with every other format on the stick (`place_audio`) |
 //! | `Engine Library/Database2/m.db`, `Track` | one row per track: metadata, key, rating, `path` = `../<audio path>` |
-//! | `m.db`, `PerformanceData` | per track: `trackData`, `overviewWaveFormData`, `beatData`, `quickCues`, `loops` ([`blob`]) |
+//! | `m.db`, `PerformanceData` | per track: `trackData`, `overviewWaveFormData`, `beatData`, `quickCues`, `loops` ([`blob`]); a table in 3.x, a view over `Track` in 2.x |
 //! | `m.db`, `Playlist`, `PlaylistEntity` | the folder and list tree ([`playlists`]) |
 //!
 //! A track is identified by its `path`: a library track found there is refreshed (metadata, cues, loops, grid, waveform) and
@@ -16,15 +16,37 @@
 //! database is built beside `m.db` and renamed over it once it passes `PRAGMA integrity_check`, so a failed or cancelled export
 //! leaves the stick as it was.
 //!
-//! # Format version: schema 3.0.0
+//! # Format version: schema 3.0.0, or 2.18.0 for older Engine
 //!
-//! Engine DJ 4.1 to 4.2 wrote it (libdjinterop `to_application_version_string`), and it is the oldest schema of the line the
-//! later releases (4.3, 4.5, 5.x) still carry: they read it and upgrade it [inferred], while 3.0.1 and 3.0.2 only add album art
-//! columns and are refused by firmware older than 4.3. Earlier schemas (2.x, Engine DJ 2.0 to 4.0.1) keep the analysis blobs
-//! inside `Track`; 3.0.0 has the separate `PerformanceData` table, so one `UPDATE` of one row carries every analysis blob.
-//! An existing `m.db` with another version is not touched: the export fails with the version it found. A library in the old
-//! two-file layout (`Engine Library/m.db`) is refused the same way. Only `m.db` is made: libdjinterop writes no other file for
-//! this schema (the history and streaming databases are the players' own) [inferred from libdjinterop, not tried on hardware].
+//! libdjinterop (`to_application_version_string`) names the Engine DJ Desktop/OS releases that write each schema version of
+//! `Database2/m.db`; the last column is what this plugin does with it:
+//!
+//! | Schema | Written by Engine DJ Desktop and OS | Here |
+//! |---|---|---|
+//! | 2.18.0 | 2.0.x to 2.1.x | new library with the option `engine_dj.schema` = `2.18.0`; extended |
+//! | 2.20.1 to 2.20.3 | 2.2.x to 3.0.1 | extended |
+//! | 2.21.0 to 2.21.2 | 3.1.0 to 4.0.1 | extended |
+//! | 3.0.0 | 4.1.0 to 4.2.1 | new library by default (`engine_dj.schema` = `3.0.0`); extended |
+//! | 3.0.1 | 4.3.x | extended |
+//! | 3.0.2 | 4.5.0, 5.0.x | extended |
+//!
+//! An existing `m.db` of one of these versions is extended in place and keeps its version: the rows written are valid for each
+//! (3.0.1 only changes triggers, 3.0.2 adds the nullable `Track.albumArtSourceHash` which stays NULL, 2.20.3 and later have
+//! `Track.lastEditTime`, 2.18.0 to 2.20.2 do not). The option only decides the schema of a new library and converts nothing: on
+//! a stick that holds one, a report note says that the version found was kept. Any other version (1.x, a release newer than 3.0.2)
+//! is refused with the version found and nothing is changed, as is a library in the old two-file layout (`Engine Library/m.db`).
+//!
+//! A new library is 3.0.0, the oldest schema of the 3.x line: the later releases (4.3, 4.5, 5.x) still carry it, read it and
+//! upgrade it [inferred]. 3.0.0 has the separate `PerformanceData` table, so one `UPDATE` of one row carries every analysis blob.
+//! For Engine DJ and players older than 4.1 (they refuse 3.x) the option gives 2.18.0, the oldest `Database2` schema (Engine
+//! 2.0.x); it is the schema that reaches back furthest, and the releases up to 4.0.1 are expected to read an older schema and
+//! upgrade it [inferred: libdjinterop reads and writes each version but says nothing about upgrades, and no library of
+//! this version was tried on a player]. 2.x keeps the analysis blobs in `Track`; `PerformanceData` is a view over `Track` with an
+//! `INSTEAD OF UPDATE` trigger per column, so the `UPDATE PerformanceData` used for 3.x reaches the same columns
+//! ([`schema_2`] has the DDL). The blob layouts are the same in both lines (libdjinterop shares `engine/v2/*_blob.cpp`). Only `m.db`
+//! is made: libdjinterop writes no other file for these schemas (the history and streaming databases are the players' own)
+//! [inferred from libdjinterop, not tried on hardware]. Schema 1.x (Engine Prime and Engine OS 1.x, the two-file layout) is not
+//! written.
 //!
 //! # Conventions
 //!
@@ -43,26 +65,33 @@
 //!
 //! # Sources
 //!
-//! libdjinterop (<https://github.com/xsco/libdjinterop>, LGPL-3.0): `src/djinterop/engine/schema/schema_3_0_0.cpp` (DDL, the
-//! `Information` row), `engine/v2/*_blob.cpp` (blob layouts), `engine/v3/track_impl.cpp` (`Track` row defaults, `PerformanceData`
-//! from a track), `engine/v2/playlist_*` and `playlist_entity_table.cpp` (list and entity chains), `engine/engine.cpp`
-//! (`normalize_beatgrid`), `engine/track_utils.hpp` (overview extents). This plugin shares no code with it.
+//! libdjinterop (<https://github.com/xsco/libdjinterop>, LGPL-3.0): `include/djinterop/engine/engine_schema.hpp` (the schema lists
+//! and the Engine releases of each), `src/djinterop/engine/schema/schema.cpp` (version detection), `schema_2_18_0.cpp` and
+//! `schema_3_0_0.cpp` (DDL, the `Information` row), `schema_3_0_1.cpp`, `schema_3_0_2.cpp` and the 2.x files (differences),
+//! `engine/v2/*_blob.cpp` (blob layouts), `engine/v2/track_table.cpp` (`lastEditTime` from 2.20.3), `engine/v3/track_impl.cpp` and
+//! `engine/v2/track_impl.cpp` (`Track` row defaults, the same in both), `engine/v2/playlist_*` and `playlist_entity_table.cpp`
+//! (list and entity chains), `engine/engine.cpp` (`normalize_beatgrid`), `engine/track_utils.hpp` (overview extents). This plugin
+//! shares no code with it.
 
 pub mod blob;
 pub mod perf;
 pub mod playlists;
 pub mod schema;
+pub mod schema_2;
 pub mod tracks;
 
 use openfader_plugin::library::{
-    audio_slot, host, place_audio, DeviceInfo, ExportOptions, ExportReport, Feature, LibraryPlugin,
-    Probe, Snapshot, Source,
+    audio_slot, host, place_audio, Choice, DeviceInfo, ExportOptions, ExportReport, Feature, Field,
+    FieldKind, LibraryPlugin, Probe, Scope, Snapshot, Source,
 };
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 /// Name of the library in [`DeviceInfo::libraries`] and the folder it lives in.
 const LIBRARY: &str = "Engine Library";
+
+/// Key of the device option that picks the schema of a new library ([`schema::NEW`], as [`schema::text`]).
+pub const SCHEMA_OPTION: &str = "engine_dj.schema";
 
 /// `Engine Library/Database2/m.db` of the device mounted at `root`.
 pub fn database(root: &Path) -> PathBuf {
@@ -88,6 +117,32 @@ impl LibraryPlugin for Plugin {
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs() as i64);
         Ok(DeviceInfo {
+            title: "Engine DJ".into(),
+            about: "Engine DJ 4.1 and newer and Denon DJ Prime/SC, Numark and RANE players on firmware 4.1 and newer; the schema option adds 2.0 to 4.0.1"
+                .into(),
+            options: vec![Field {
+                key: SCHEMA_OPTION.into(),
+                label: "Schema of a new library".into(),
+                hint: "Only for a library that is made now: one that exists keeps its schema and is extended. Older Engine \
+                       versions need 2.18.0 and are expected to be read by the newer ones too."
+                    .into(),
+                default: schema::text(schema::CURRENT),
+                scope: Scope::Device,
+                kind: FieldKind::Choice {
+                    choices: vec![
+                        Choice {
+                            value: schema::text(schema::CURRENT),
+                            label: "3.0.0: Engine DJ and players 4.1 and newer".into(),
+                        },
+                        Choice {
+                            value: schema::text(schema::OLDEST),
+                            label: "2.18.0: Engine DJ and players 2.0 to 4.0.1".into(),
+                        },
+                    ],
+                    from_list: None,
+                    none: None,
+                },
+            }],
             libraries: if db.is_file() {
                 vec![LIBRARY.into()]
             } else {
@@ -136,6 +191,11 @@ fn export(
             root.join(LIBRARY).display()
         ));
     }
+    let want = match options.config.get(SCHEMA_OPTION) {
+        None => schema::CURRENT,
+        Some(v) => schema::parse_new(v)
+            .ok_or_else(|| format!("{SCHEMA_OPTION}: unknown schema {v:?}; use 3.0.0 or 2.18.0"))?,
+    };
     let mut report = ExportReport::default();
 
     // Where each track's audio goes, and whether it all fits before anything is copied.
@@ -184,7 +244,15 @@ fn export(
         }
     }
 
-    let mut staged = schema::stage(&db)?;
+    let mut staged = schema::stage(&db, want)?;
+    if staged.version != want && want != schema::CURRENT {
+        report.notes.push(format!(
+            "the library on the device has schema {}, so it was extended as it is; {} applies to a new library only",
+            schema::text(staged.version),
+            schema::text(want)
+        ));
+    }
+    let edit_time = schema::has_edit_time(staged.version);
     let tx = staged.conn.transaction().map_err(|e| e.to_string())?;
     let uuid = staged.uuid.clone();
     let db_err = |e: rusqlite::Error| format!("{}: {e}", db.display());
@@ -215,6 +283,7 @@ fn export(
             path: format!("../{rel}"),
             file: &file,
             rate,
+            edit_time,
         };
         let (id, w) = tracks::upsert(&tx, &uuid, &placed).map_err(db_err)?;
         ids[i] = Some(id);

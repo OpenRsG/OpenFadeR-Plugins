@@ -70,6 +70,8 @@ impl LibraryPlugin for Plugin {
             } else {
                 vec![]
             },
+            title: "VirtualDJ".into(),
+            about: "VirtualDJ 8 and newer on Windows and macOS: opens the drive's own database when it is plugged in".into(),
             can_write: root.is_dir(),
             features: vec![Feature::Export],
             modified,

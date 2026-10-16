@@ -149,7 +149,13 @@ impl Job<'_> {
         self.report.playlists = snap.playlists.len();
         merge::mytag(&mut self.tags, snap, &ids);
         self.write_device_files()?;
-        commit(self.dest, &self.db, &self.tags, self.key)?;
+        commit(
+            self.dest,
+            &self.db,
+            &self.tags,
+            self.key,
+            super::wants_onelibrary(&self.o.config),
+        )?;
         Ok(ids.iter().flatten().copied().collect())
     }
 

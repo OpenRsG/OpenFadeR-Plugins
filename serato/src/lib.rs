@@ -51,6 +51,8 @@ impl LibraryPlugin for Plugin {
             } else {
                 vec![]
             },
+            title: "Serato DJ".into(),
+            about: "Serato DJ Pro and Serato DJ Lite on a computer; the cues travel inside the audio files".into(),
             can_write: root.is_dir(),
             features: vec![Feature::Export],
             modified: db

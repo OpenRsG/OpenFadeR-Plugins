@@ -75,6 +75,9 @@ impl LibraryPlugin for Plugin {
             } else {
                 Vec::new()
             },
+            title: "Traktor".into(),
+            about: "Traktor Pro 3 and 4 on a computer: Collection > Import another Collection"
+                .into(),
             can_write: root.is_dir(),
             features: vec![Feature::Export],
             modified,

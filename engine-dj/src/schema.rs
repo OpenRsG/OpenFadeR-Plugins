@@ -1,17 +1,61 @@
-//! The database file: schema 3.0.0 (DDL of libdjinterop `schema_3_0_0.cpp::create`), creating it, opening an existing one for a
+//! The database file: its schema versions (3.0.0 and 2.18.0 for a new library, DDL of libdjinterop `schema_3_0_0.cpp::create` and
+//! [`crate::schema_2`]; ten versions of the 2.x and 3.x lines extended in place), creating it, opening an existing one for a
 //! merge, and swapping the result in.
 
+use crate::schema_2;
 use rusqlite::{params, Connection, OpenFlags};
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// `Information.schemaVersionMajor/Minor/Patch` this plugin writes and the only version it extends.
-pub const VERSION: (i64, i64, i64) = (3, 0, 0);
+/// A schema version: `Information.schemaVersionMajor/Minor/Patch`.
+pub type Version = (i64, i64, i64);
 
-/// Everything `Engine Library/Database2/m.db` is made of, with the row of the stock album art (id 1: "no artwork") the tracks
-/// point at. `Information` is filled in by [`create`].
+/// The schema of a new library unless the user picks another: Engine DJ 4.1.0 to 4.2.1 (libdjinterop `to_application_version_string`).
+pub const CURRENT: Version = (3, 0, 0);
+
+/// The oldest `Database2` schema, Engine DJ 2.0.x to 2.1.x: the one a new library for older Engine versions gets.
+pub const OLDEST: Version = (2, 18, 0);
+
+/// The schemas a new library can be made with.
+pub const NEW: [Version; 2] = [CURRENT, OLDEST];
+
+/// The schemas an existing library is extended with, all of libdjinterop's `supported_v2_schemas` and `supported_v3_schemas`:
+/// 2.18.0, 2.20.1 to 2.20.3, 2.21.0 to 2.21.2 (Engine 2.0 to 4.0.1) and 3.0.0 to 3.0.2 (Engine 4.1 to 5.0). The rows written
+/// are valid for each: 3.0.1 only changes triggers and 3.0.2 adds the nullable `Track.albumArtSourceHash` column (libdjinterop
+/// `schema_3_0_1.cpp`, `schema_3_0_2.cpp`), which stays NULL; the 2.x line is covered by [`has_edit_time`] and the `PerformanceData`
+/// view of [`crate::schema_2`].
+const EXTENDED: [Version; 10] = [
+    (2, 18, 0),
+    (2, 20, 1),
+    (2, 20, 2),
+    (2, 20, 3),
+    (2, 21, 0),
+    (2, 21, 1),
+    (2, 21, 2),
+    (3, 0, 0),
+    (3, 0, 1),
+    (3, 0, 2),
+];
+
+/// `1.2.3` for `(1, 2, 3)`: how a version is stored in the device option and shown in messages.
+pub fn text(v: Version) -> String {
+    format!("{}.{}.{}", v.0, v.1, v.2)
+}
+
+/// The version a device option value names; only one of [`NEW`].
+pub fn parse_new(s: &str) -> Option<Version> {
+    NEW.into_iter().find(|&v| text(v) == s)
+}
+
+/// `Track.lastEditTime` exists from 2.20.3 on (libdjinterop `track_table.cpp`: `schema_2_20_3`).
+pub fn has_edit_time(v: Version) -> bool {
+    v >= (2, 20, 3)
+}
+
+/// Everything a schema 3.0.0 `Engine Library/Database2/m.db` is made of, with the row of the stock album art (id 1: "no artwork")
+/// the tracks point at. `Information` is filled in by [`stage`].
 const DDL: &str = "
 CREATE TABLE Information (id INTEGER PRIMARY KEY AUTOINCREMENT, uuid TEXT, schemaVersionMajor INTEGER,
   schemaVersionMinor INTEGER, schemaVersionPatch INTEGER, currentPlayedIndiciator INTEGER,
@@ -172,6 +216,8 @@ pub struct Staged {
     pub conn: Connection,
     /// `Information.uuid`: the id of this library, the `databaseUuid` of its playlist entries.
     pub uuid: String,
+    /// The schema version of the file: the existing library's, else the one it was made with.
+    pub version: Version,
     target: PathBuf,
     temp: Temp,
 }
@@ -186,16 +232,16 @@ impl Drop for Temp {
 }
 
 /// Opens the library at `db` for writing: a consistent copy of it when it exists (`VACUUM INTO` also folds in a journal a
-/// player left behind), refusing a file that is not an Engine library or has another schema version than [`VERSION`]; else a
-/// new library.
-pub fn stage(db: &Path) -> Result<Staged, String> {
+/// player left behind), refusing a file that is not an Engine library or whose schema version is not in [`EXTENDED`]; else a
+/// new library of the schema `new` (one of [`NEW`]).
+pub fn stage(db: &Path, new: Version) -> Result<Staged, String> {
     let err = |e: rusqlite::Error| format!("{}: {e}", db.display());
     let temp = Temp(db.with_extension("db.new"));
     let _ = std::fs::remove_file(&temp.0);
     if let Some(dir) = db.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
-    let uuid = if db.is_file() {
+    let (uuid, version) = if db.is_file() {
         let old = Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(err)?;
         let (uuid, major, minor, patch): (String, i64, i64, i64) = old
             .query_row(
@@ -204,34 +250,36 @@ pub fn stage(db: &Path) -> Result<Staged, String> {
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .map_err(|e| format!("{} is not an Engine library: {e}", db.display()))?;
-        if (major, minor, patch) != VERSION {
+        let version = (major, minor, patch);
+        if !EXTENDED.contains(&version) {
             return Err(format!(
-                "{} has schema version {major}.{minor}.{patch}; only {}.{}.{} (Engine DJ 4.1 to 4.2) can be extended, so it was left untouched",
+                "{} has schema version {}, which this plugin does not know: it extends 2.18.0, 2.20.1 to 2.20.3, 2.21.0 to 2.21.2 and 3.0.0 to 3.0.2 (Engine DJ 2.0 to 5.0), so it was left untouched",
                 db.display(),
-                VERSION.0,
-                VERSION.1,
-                VERSION.2
+                text(version)
             ));
         }
         old.execute("VACUUM INTO ?1", [temp.0.to_string_lossy()])
             .map_err(err)?;
-        uuid
+        (uuid, version)
     } else {
+        debug_assert!(NEW.contains(&new));
         let uuid = uuid();
         let conn = Connection::open(&temp.0).map_err(err)?;
-        conn.execute_batch(DDL).map_err(err)?;
+        conn.execute_batch(if new == OLDEST { schema_2::DDL } else { DDL })
+            .map_err(err)?;
         conn.execute(
             "INSERT INTO Information (uuid, schemaVersionMajor, schemaVersionMinor, schemaVersionPatch, \
              currentPlayedIndiciator, lastRekordBoxLibraryImportReadCounter) VALUES (?1, ?2, ?3, ?4, ?5, 0)",
-            params![uuid, VERSION.0, VERSION.1, VERSION.2, (random() >> 1) as i64],
+            params![uuid, new.0, new.1, new.2, (random() >> 1) as i64],
         )
         .map_err(err)?;
-        uuid
+        (uuid, new)
     };
     let conn = Connection::open(&temp.0).map_err(err)?;
     Ok(Staged {
         conn,
         uuid,
+        version,
         target: db.to_path_buf(),
         temp,
     })
