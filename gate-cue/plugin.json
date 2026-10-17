@@ -1,6 +1,7 @@
 {
   "name": "gate-cue",
   "version": "0.1.0",
+  "suggest": "rekordbox",
   "description": "XDJ-AZ Gate Cue: a pad mode where a hot cue plays only while its pad is held; letting go returns to the cue, paused, whether the deck was playing or paused before.",
   "pad_modes": [
     {

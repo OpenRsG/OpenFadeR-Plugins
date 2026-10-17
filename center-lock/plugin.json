@@ -1,6 +1,7 @@
 {
   "name": "center-lock",
   "version": "0.1.0",
+  "suggest": "rekordbox",
   "description": "CENTER LOCK (DJM-A9): the COLOR FX knobs stop at the centre during one turn, so a sweep ends exactly at off. Pick it in PREFS > CONTROLLER > Mixer > COLOR FX KNOB.",
   "knob_modes": [
     {

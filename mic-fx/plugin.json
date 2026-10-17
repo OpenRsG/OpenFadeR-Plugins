@@ -1,6 +1,7 @@
 {
   "name": "mic-fx",
   "version": "0.2.0",
+  "suggest": "rekordbox",
   "description": "Mic FX of the Pioneer DJ DJM-A9: ECHO, PITCH, MEGAPHONE, REVERB. KNOB is each effect's parameter. Classic designs built from the host's DSP blocks, no code.",
   "effects": [
     {

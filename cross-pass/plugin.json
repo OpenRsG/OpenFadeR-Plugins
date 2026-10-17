@@ -1,6 +1,7 @@
 {
   "name": "cross-pass",
   "version": "0.2.0",
+  "suggest": "rekordbox",
   "description": "CROSS-PASS filter of the Pioneer DJ DJM-V5: a Sound Color FX that keeps the lows (below 150 Hz) and filters the mids and highs: left a low-pass closes them (20 kHz down to 300 Hz), right a high-pass opens over them (20 Hz up to 8 kHz), the centre passes the signal exactly.",
   "effects": [
     {

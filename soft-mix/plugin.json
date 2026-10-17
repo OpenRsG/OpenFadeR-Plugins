@@ -1,6 +1,7 @@
 {
   "name": "soft-mix",
   "version": "0.2.0",
+  "suggest": "rekordbox",
   "description": "SOFT, the Pioneer DJ DJM-V5's Soft Mix Curve as a channel fader curve: the gain is the fader position (linear) and the highs above 2 kHz are cut by up to 6 dB while the fader is in the lower and middle part of its travel, flat at the top.",
   "effects": [
     {

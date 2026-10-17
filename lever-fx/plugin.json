@@ -1,6 +1,7 @@
 {
   "name": "lever-fx",
   "version": "0.2.0",
+  "suggest": "rekordbox",
   "description": "Lever effects of the Pioneer DJ RMX-IGNITE: ECHO, REVERB, JUGGLE, REVERSE, SOLO, STRETCH. The lever is `knob` (0 at rest to 1); at rest every effect hands the master back bit for bit. Built from the host's DSP blocks, no code.",
   "effects": [
     {

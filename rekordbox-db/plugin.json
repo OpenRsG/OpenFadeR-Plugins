@@ -1,6 +1,7 @@
 {
   "name": "rekordbox-db",
   "version": "0.1.0",
+  "suggest": "rekordbox",
   "description": "rekordbox's own collection database (master.db, SQLCipher) with its playlists, smart lists, histories and analysis files.",
   "library": {
     "lib": {

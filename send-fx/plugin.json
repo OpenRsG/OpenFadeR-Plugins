@@ -1,6 +1,7 @@
 {
   "name": "send-fx",
   "version": "0.2.0",
+  "suggest": "rekordbox",
   "description": "Send FX of the Pioneer DJ DJM-V5: SHORT DELAY, REVERB, SHIMMER, TAPE ECHO, PING PONG, ECHO-VERB. A send effect outputs only its return (no dry signal). Classic designs built from the host's DSP blocks, no code.",
   "effects": [
     {

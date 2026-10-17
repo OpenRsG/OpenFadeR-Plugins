@@ -1,6 +1,7 @@
 {
   "name": "beat-fx",
   "version": "0.2.0",
+  "suggest": "rekordbox",
   "description": "Beat FX of Pioneer DJ's rekordbox and DJM mixers that the built-in nine lack: PING PONG, SPIRAL, TRIPLET ROLL, TRIPLET LPF / HPF (TRIPLET FILTER), HELIX, MOBIUS. Classic designs built from the host's DSP blocks, no code.",
   "effects": [
     {

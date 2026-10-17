@@ -1,6 +1,7 @@
 {
   "name": "rekordbox-xml",
   "version": "0.1.0",
+  "suggest": "rekordbox",
   "description": "Reads and writes rekordbox's \"Export Collection in xml format\" (rekordbox.xml): tracks, playlists, beat grids and cues.",
   "library": {
     "lib": {
