@@ -31,7 +31,7 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 | `beat-fx`, `mic-fx`, `send-fx`, `lever-fx`, `cross-pass`, `soft-mix`, `tutorial-fx` | effects (JSON) |
 | `center-lock`, `gate-cue` | knob and pad modes (JSON) |
 | `now-playing`, `mix-log` | events, actions, settings (Python, Lua) |
-| `yt-dlp` | track sources: YouTube / SoundCloud search, playlists and downloads (Python, needs `yt-dlp`) |
+| `yt-dlp` | track sources: YouTube / SoundCloud search, playlists and downloads (Python, needs `yt-dlp`; on Windows `winget install -e --id yt-dlp.yt-dlp`, which brings ffmpeg too) |
 
 ### One stick for every player and app
 

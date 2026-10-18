@@ -7,6 +7,7 @@ cannot play (opus, webm) into AAC, without it only streams that already are m4a 
 Track ids: the video id on YouTube, the path of the track page (`artist/track`) on SoundCloud.
 Playlists: the file playlists.json next to this script lists addresses to show under each source; edit it freely.
 """
+import glob
 import json
 import os
 import shutil
@@ -25,13 +26,29 @@ def results():
     return max(1, min(500, int(SETTINGS.get("results") or 25)))
 
 
+def program(name):
+    """Path of a program: on PATH, or where winget puts it (an app started before the install has the old PATH)."""
+    found = shutil.which(name)
+    if found or os.name != "nt":
+        return found
+    links = [os.path.join(os.environ.get(v, ""), *d, "Links", name + ".exe")
+             for v, d in (("LOCALAPPDATA", ("Microsoft", "WinGet")), ("ProgramFiles", ("WinGet",)))]
+    packages = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Microsoft", "WinGet", "Packages")
+    for f in links + sorted(glob.glob(os.path.join(packages, "*", "**", name + ".exe"), recursive=True)):
+        if os.path.isfile(f):
+            return f
+    return None
+
+
 def convert_args(download=False):
     """yt-dlp arguments that turn the stream into the chosen format (ffmpeg), or pick a playable one without it."""
     fmt = SETTINGS.get("format", "m4a")
-    if fmt == "best" or not shutil.which("ffmpeg"):
+    ffmpeg = program("ffmpeg")
+    if fmt == "best" or not ffmpeg:
         return ["-f", PLAYABLE]
     quality = [] if download else ["--audio-quality", "192K"]
-    return ["-f", "bestaudio/best", "-x", "--audio-format", fmt, *quality, *(["--embed-metadata"] if download else [])]
+    return ["-f", "bestaudio/best", "-x", "--audio-format", fmt, *quality, "--ffmpeg-location", ffmpeg,
+            *(["--embed-metadata"] if download else [])]
 
 SOURCES = {
     "youtube": {"search": "ytsearch{n}:{q}", "page": "https://www.youtube.com/watch?v={id}"},
@@ -47,18 +64,30 @@ class Failure(Exception):
 
 
 def ytdlp(args, timeout=120):
-    if not shutil.which("yt-dlp"):
-        raise Failure("yt-dlp is not installed (https://github.com/yt-dlp/yt-dlp)")
+    exe = program("yt-dlp")
+    if not exe:
+        raise Failure("yt-dlp is not installed (https://github.com/yt-dlp/yt-dlp; on Windows: winget install -e --id yt-dlp.yt-dlp)")
     try:
-        done = subprocess.run(["yt-dlp", "--no-warnings", *args], capture_output=True, text=True, timeout=timeout)
+        # UTF-8 both ways: titles and file names in any script. No console window on Windows (the app has none).
+        done = subprocess.run([exe, "--no-warnings", "--encoding", "utf-8", *args], stdin=subprocess.DEVNULL,
+                              capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except subprocess.TimeoutExpired:
         raise Failure(f"yt-dlp did not answer within {timeout} s")
     return done
 
 
-def last_line(text):
-    lines = [l for l in text.strip().splitlines() if l.strip()]
-    return lines[-1] if lines else "no message"
+def ok(done):
+    """The run did its job. 100 is yt-dlp's code for its self-update check failing (yt_dlp/update.py), which it reports
+    even when everything it was asked to do worked; a failed download sets 1."""
+    return done.returncode in (0, 100)
+
+
+def failed(done):
+    """What went wrong in a yt-dlp run: its last error line, else its last line, with its exit code."""
+    lines = [l.strip() for l in done.stderr.splitlines() if l.strip()]
+    errors = [l for l in lines if l.startswith("ERROR:")]
+    return f"{(errors or lines or ['no message'])[-1]} (yt-dlp exit code {done.returncode})"
 
 
 def entries(target):
@@ -71,7 +100,7 @@ def entries(target):
         except ValueError:
             pass
     if not rows and done.returncode != 0:
-        raise Failure(last_line(done.stderr))
+        raise Failure(failed(done))
     return rows
 
 
@@ -125,9 +154,9 @@ def fetch(source, ident, dest, name):
             timeout=600,
         )
         made = [f for f in os.listdir(work) if f.startswith(name + ".") and not f.endswith((".part", ".ytdl"))]
-        if done.returncode != 0 or not made:
+        if not ok(done) or not made:
             hint = " (without ffmpeg only m4a and mp3 streams can be fetched)" if "-x" not in convert else ""
-            raise Failure(last_line(done.stderr) + hint)
+            raise Failure(failed(done) + hint)
         os.replace(os.path.join(work, made[0]), os.path.join(dest, made[0]))
         return {"file": made[0]}
     finally:
@@ -147,7 +176,7 @@ def download(address, folder):
     )
     files = [l for l in done.stdout.splitlines() if os.path.isfile(l)]
     if not files:
-        raise Failure(last_line(done.stderr))
+        raise Failure(failed(done))
     return {"commands": [
         {"cmd": "import", "files": files},
         {"cmd": "toast", "text": f"yt-dlp: {len(files)} track{'s' if len(files) != 1 else ''} added to the collection"},
@@ -179,7 +208,7 @@ def handle(req):
 
 if __name__ == "__main__":
     try:
-        reply = handle(json.load(sys.stdin))
+        reply = handle(json.loads(sys.stdin.buffer.read().decode("utf-8")))  # the app writes UTF-8, whatever the locale
     except (Failure, KeyError) as e:
         reply = {"error": f"missing {e}" if isinstance(e, KeyError) else str(e)}
-    json.dump(reply, sys.stdout)
+    json.dump(reply, sys.stdout)  # ASCII only (json escapes the rest): safe in any console code page
