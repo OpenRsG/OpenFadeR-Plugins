@@ -1,0 +1,3 @@
+{
+ "CROSS-PASS filter of the Pioneer DJ DJM-V5: a Sound Color FX that keeps the lows (below 150 Hz) and filters the mids and highs: left a low-pass closes them (20 kHz down to 300 Hz), right a high-pass opens over them (20 Hz up to 8 kHz), the centre passes the signal exactly.": "CROSS-PASS-Filter des Pioneer DJ DJM-V5: ein Sound Color FX, der die Tiefen (unter 150 Hz) behält und Mitten und Höhen filtert: links schließt ein Tiefpass sie (20 kHz bis 300 Hz), rechts öffnet ein Hochpass darüber (20 Hz bis 8 kHz), in der Mitte läuft das Signal unverändert durch."
+}

@@ -1,0 +1,19 @@
+{
+ "Copying tracks": "Copiando pistas",
+ "VirtualDJ 8 and newer on Windows and macOS: opens the drive's own database when it is plugged in": "VirtualDJ 8 y posteriores en Windows y macOS: abre la base de datos propia de la unidad cuando se conecta",
+ "VirtualDJ database": "Base de datos de VirtualDJ",
+ "VirtualDJ database: read the desktop library (database.xml with its lists), and export a collection with its cues, loops, grids and playlists to a drive's own VirtualDJ/database.xml.": "Base de datos de VirtualDJ: lee la biblioteca del ordenador (database.xml con sus listas) y exporta una colección con sus cues, loops, cuadrículas y listas al VirtualDJ/database.xml propio de una unidad.",
+ "Writing library": "Escribiendo la biblioteca",
+ "cancelled": "cancelado",
+ "lists were written to VirtualDJ/{} on the device": "las listas se escribieron en VirtualDJ/{} del dispositivo",
+ "not enough space on the device: {} MB of tracks to copy, {} MB free": "no hay espacio suficiente en el dispositivo: {} MB de pistas por copiar, {} MB libres",
+ "skipped: {}": "omitido: {}",
+ "the plugin panicked": "el plugin falló",
+ "{}: another list of the same folder has this file name, it replaces that one": "{}: otra lista de la misma carpeta tiene este nombre de archivo y reemplaza a esa",
+ "{}: no audio file": "{}: sin archivo de audio",
+ "{}: no such playlist": "{}: no existe la lista",
+ "{}: not UTF-8": "{}: no es UTF-8",
+ "{}: not a VirtualDJ database": "{}: no es una base de datos de VirtualDJ",
+ "{}: not a folder": "{}: no es una carpeta",
+ "{}: the loop at {} s is written as a cue (no tempo to size it)": "{}: el loop en {} s se escribe como un cue (no hay tempo para dimensionarlo)"
+}

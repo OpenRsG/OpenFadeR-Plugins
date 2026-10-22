@@ -1,0 +1,17 @@
+{
+ "Copying tracks": "Copiando pistas",
+ "Traktor Pro 3 and 4 on a computer: Collection > Import another Collection": "Traktor Pro 3 y 4 en un ordenador: Collection > Import another Collection",
+ "Traktor collection": "Colección de Traktor",
+ "Traktor collection (collection.nml): read from Traktor's folder or a USB stick, and written on sticks next to the other libraries, sharing their audio, for Traktor's Import another Collection.": "Colección de Traktor (collection.nml): se lee desde la carpeta de Traktor o una memoria USB, y se escribe en las memorias junto a las otras bibliotecas, compartiendo su audio, para Import another Collection de Traktor.",
+ "Traktor: right-click Collection > Import another Collection and pick {} on the device (volume \"{}\")": "Traktor: clic derecho en Collection > Import another Collection y elige {} en el dispositivo (volumen \"{}\")",
+ "Writing the Traktor collection": "Escribiendo la colección de Traktor",
+ "cancelled": "cancelado",
+ "no playlist {}": "no existe la lista {}",
+ "not enough space on the device: the new audio needs {} MB, {} MB are free": "no hay espacio suficiente en el dispositivo: el audio nuevo necesita {} MB y hay {} MB libres",
+ "the plugin panicked": "el plugin falló",
+ "{}: hot cue {} left out (Traktor has pads {} to {}, one cue each)": "{}: HOT CUE {} omitido (Traktor tiene pads {} a {}, un cue cada uno)",
+ "{}: no Traktor collection": "{}: no hay colección de Traktor",
+ "{}: no audio file": "{}: sin archivo de audio",
+ "{}: not a Traktor collection (<{}>); the file was left as it is": "{}: no es una colección de Traktor (<{}>); el archivo se dejó como estaba",
+ "{}: {}; the file was left as it is": "{}: {}; el archivo se dejó como estaba"
+}

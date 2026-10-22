@@ -1,0 +1,22 @@
+{
+  "YouTube and SoundCloud: search, playlists and downloads through the yt-dlp program": "YouTube e SoundCloud: busca, playlists e downloads pelo programa yt-dlp",
+  "Results per search or playlist": "Resultados por busca ou playlist",
+  "Download format": "Formato de download",
+  "mp3 needs ffmpeg": "mp3 precisa do ffmpeg",
+  "best": "melhor",
+  "Download from URL…": "Baixar de uma URL…",
+  "Address of a YouTube or SoundCloud track or playlist": "Endereço de uma faixa ou playlist do YouTube ou SoundCloud",
+  "yt-dlp is not installed (https://github.com/yt-dlp/yt-dlp; on Windows: winget install -e --id yt-dlp.yt-dlp)": "yt-dlp não está instalado (https://github.com/yt-dlp/yt-dlp; no Windows: winget install -e --id yt-dlp.yt-dlp)",
+  "yt-dlp did not answer within {} s": "o yt-dlp não respondeu em {} s",
+  "{} (yt-dlp exit code {})": "{} (código de saída do yt-dlp: {})",
+  "{} (yt-dlp exit code {}) (without ffmpeg only m4a and mp3 streams can be fetched)": "{} (código de saída do yt-dlp: {}) (sem o ffmpeg, só é possível baixar streams m4a e mp3)",
+  "the app gave no folder to download into": "o app não indicou nenhuma pasta para o download",
+  "yt-dlp: 1 track added to the collection": "yt-dlp: 1 faixa adicionada à coleção",
+  "yt-dlp: {} tracks added to the collection": "yt-dlp: {} faixas adicionadas à coleção",
+  "unknown action {}": "ação desconhecida {}",
+  "no address given": "nenhum endereço informado",
+  "unknown source {}": "fonte desconhecida {}",
+  "unknown op {}": "operação desconhecida {}",
+  "missing {}": "{} ausente",
+  "Search": "Pesquisa"
+}

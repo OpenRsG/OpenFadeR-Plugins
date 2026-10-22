@@ -1,0 +1,16 @@
+{
+ "Sampler packs (.spp): a zip of audio files and a sampler_pack.xml listing the samples, their BPM and the pack's lists.": "Sampler-Packs (.spp): ein Zip aus Audiodateien und einer sampler_pack.xml mit den Samples, ihrem BPM und den Listen des Packs.",
+ "Import Sample Pack…": "Sample Pack importieren…",
+ "not a sampler pack (zip)": "kein Sampler-Pack (Zip)",
+ "{} is not a sampler pack (zip)": "{} ist kein Sampler-Pack (Zip)",
+ "{}: damaged (checksum)": "{}: beschädigt (Prüfsumme)",
+ "{}: path leaves the pack folder": "{}: der Pfad verlässt den Pack-Ordner",
+ "{} has no sampler_pack.xml: not a sampler pack": "{} enthält keine sampler_pack.xml: kein Sampler-Pack",
+ "{}: no such list in the pack": "{}: diese Liste gibt es im Pack nicht",
+ "sample pack": "Sample-Pack",
+ "a TRACK of sampler_pack.xml has no location": "ein TRACK in sampler_pack.xml hat keinen Speicherort",
+ "the pack lists no tracks": "das Pack listet keine Tracks",
+ "{} is not in the zip": "{} ist nicht im Zip",
+ "{}: damaged zip": "{}: beschädigtes Zip",
+ "{}: zip method {} is not supported (stored and deflate are)": "{}: Zip-Methode {} wird nicht unterstützt (stored und deflate schon)"
+}

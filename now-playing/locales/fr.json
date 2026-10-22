@@ -1,0 +1,15 @@
+{
+ "Writes the track on air to a text file (stream overlays) and keeps a setlist of what stayed on air": "Écrit le morceau en cours dans un fichier texte (overlays de stream) et tient une setlist de ce qui est passé à l'antenne",
+ "Show now playing": "Afficher le morceau en cours",
+ "Open the now-playing folder": "Ouvrir le dossier now-playing",
+ "Folder": "Dossier",
+ "Where now-playing.txt and setlist.txt go; empty = <data dir>/openfader/plugins/now-playing": "Emplacement de now-playing.txt et setlist.txt ; vide = <data dir>/openfader/plugins/now-playing",
+ "Line format": "Format de ligne",
+ "Artist - Title": "Artiste - Titre",
+ "Title - Artist": "Titre - Artiste",
+ "Title": "Titre",
+ "Write when a deck starts playing (else when a track is loaded)": "Écrire quand un deck démarre la lecture (sinon au chargement d'un morceau)",
+ "Deck {}: {}": "Deck {} : {}",
+ "nothing has been played yet": "rien n'a encore été joué",
+ "unknown op {}": "opération inconnue {}"
+}

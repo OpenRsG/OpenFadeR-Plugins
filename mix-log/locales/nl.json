@@ -1,0 +1,14 @@
+{
+ "Keeps a log of every mix: each track that stayed on air, with time, deck, BPM and key, one file per day (CSV or text). Written in Lua, runs inside the app.": "Houdt een logboek van elke mix bij: elke track die te horen was, met tijd, deck, BPM en toonsoort, één bestand per dag (CSV of tekst). Geschreven in Lua, draait in de app.",
+ "Open today's mix log": "Open het mixlogboek van vandaag",
+ "How many tracks today?": "Hoeveel tracks vandaag?",
+ "Folder": "Map",
+ "Empty = <data dir>/openfader/plugins/mix-log": "Leeg = <data dir>/openfader/plugins/mix-log",
+ "File format": "Bestandsformaat",
+ "Write BPM and key": "BPM en toonsoort schrijven",
+ "Toast each logged track": "Elke gelogde track melden",
+ "mix-log: {} logged": "mix-log: {} gelogd",
+ "mix-log: nothing played today yet": "mix-log: vandaag is er nog niets gespeeld",
+ "mix-log: 1 track today": "mix-log: 1 track vandaag",
+ "mix-log: {} tracks today": "mix-log: {} tracks vandaag"
+}
