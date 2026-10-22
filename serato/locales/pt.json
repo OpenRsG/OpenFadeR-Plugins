@@ -1,0 +1,17 @@
+{
+ "Serato DJ Pro and Serato DJ Lite on a computer; the cues travel inside the audio files": "Serato DJ Pro e Serato DJ Lite em um computador; os cues ficam dentro dos arquivos de áudio",
+ "Serato DJ library: read the library of a computer or a USB stick (database V2, crates, and cues, loops and beat grid from the audio file tags) and write it to USB sticks and SD cards, sharing the audio of the other formats on the stick.": "Biblioteca do Serato DJ: lê a biblioteca de um computador ou de um pen drive USB (database V2, crates, e cues, loops e grade de batidas das tags dos arquivos de áudio) e a grava em pen drives USB e cartões SD, compartilhando o áudio dos outros formatos no pen drive.",
+ "Serato library": "Biblioteca do Serato",
+ "Writing Serato library": "Gravando a biblioteca do Serato",
+ "cancelled": "cancelado",
+ "its file type holds no Serato tags": "este tipo de arquivo não contém tags do Serato",
+ "no crate {}": "não há crate {}",
+ "not enough space on the device: {} MB to copy, {} MB free": "espaço insuficiente no dispositivo: {} MB para copiar, {} MB livres",
+ "the plugin panicked": "o plugin travou",
+ "{} memory cues were not written: Serato has no memory cues": "{} cues MEMORY não foram gravados: o Serato não tem cues MEMORY",
+ "{} tracks got a private copy under {}: their cues, loops and grid did not fit the shared copy without changing its size": "{} faixas receberam uma cópia privada em {}: seus cues, loops e grade não couberam na cópia compartilhada sem alterar o tamanho dela",
+ "{}: cannot write tags ({})": "{}: não foi possível gravar as tags ({})",
+ "{}: cues and grid not written, {}": "{}: cues e grade não gravados, {}",
+ "{}: no audio file": "{}: sem arquivo de áudio",
+ "{}: not a Serato library": "{}: não é uma biblioteca do Serato"
+}

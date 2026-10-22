@@ -1,0 +1,3 @@
+{
+ "Lever effects of the Pioneer DJ RMX-IGNITE: ECHO, REVERB, JUGGLE, REVERSE, SOLO, STRETCH. The lever is `knob` (0 at rest to 1); at rest every effect hands the master back bit for bit. Built from the host's DSP blocks, no code.": "Hefboomeffecten van de Pioneer DJ RMX-IGNITE: ECHO, REVERB, JUGGLE, REVERSE, SOLO, STRETCH. De hefboom is `knob` (0 in rust tot 1); in rust geeft elk effect de master bit voor bit terug. Gebouwd met de DSP-blokken van de host, zonder code."
+}

@@ -1,0 +1,14 @@
+{
+ "Keeps a log of every mix: each track that stayed on air, with time, deck, BPM and key, one file per day (CSV or text). Written in Lua, runs inside the app.": "Mantém um registro de cada mix: cada faixa que tocou, com hora, deck, BPM e tom, um arquivo por dia (CSV ou texto). Escrito em Lua, roda dentro do app.",
+ "Open today's mix log": "Abrir o registro de mix de hoje",
+ "How many tracks today?": "Quantas faixas hoje?",
+ "Folder": "Pasta",
+ "Empty = <data dir>/openfader/plugins/mix-log": "Vazio = <data dir>/openfader/plugins/mix-log",
+ "File format": "Formato do arquivo",
+ "Write BPM and key": "Gravar BPM e tom",
+ "Toast each logged track": "Notificar cada faixa registrada",
+ "mix-log: {} logged": "mix-log: {} registrada",
+ "mix-log: nothing played today yet": "mix-log: nada tocou hoje ainda",
+ "mix-log: 1 track today": "mix-log: 1 faixa hoje",
+ "mix-log: {} tracks today": "mix-log: {} faixas hoje"
+}

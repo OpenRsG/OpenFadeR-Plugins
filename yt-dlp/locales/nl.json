@@ -1,0 +1,22 @@
+{
+  "YouTube and SoundCloud: search, playlists and downloads through the yt-dlp program": "YouTube en SoundCloud: zoeken, afspeellijsten en downloads via het programma yt-dlp",
+  "Results per search or playlist": "Resultaten per zoekopdracht of afspeellijst",
+  "Download format": "Downloadformaat",
+  "mp3 needs ffmpeg": "mp3 vereist ffmpeg",
+  "best": "beste",
+  "Download from URL…": "Downloaden van URL…",
+  "Address of a YouTube or SoundCloud track or playlist": "Adres van een YouTube- of SoundCloud-track of afspeellijst",
+  "yt-dlp is not installed (https://github.com/yt-dlp/yt-dlp; on Windows: winget install -e --id yt-dlp.yt-dlp)": "yt-dlp is niet geïnstalleerd (https://github.com/yt-dlp/yt-dlp; op Windows: winget install -e --id yt-dlp.yt-dlp)",
+  "yt-dlp did not answer within {} s": "yt-dlp reageerde niet binnen {} s",
+  "{} (yt-dlp exit code {})": "{} (afsluitcode van yt-dlp: {})",
+  "{} (yt-dlp exit code {}) (without ffmpeg only m4a and mp3 streams can be fetched)": "{} (afsluitcode van yt-dlp: {}) (zonder ffmpeg kunnen alleen m4a- en mp3-streams worden opgehaald)",
+  "the app gave no folder to download into": "de app gaf geen map om in te downloaden",
+  "yt-dlp: 1 track added to the collection": "yt-dlp: 1 track toegevoegd aan de collectie",
+  "yt-dlp: {} tracks added to the collection": "yt-dlp: {} tracks toegevoegd aan de collectie",
+  "unknown action {}": "onbekende actie {}",
+  "no address given": "geen adres opgegeven",
+  "unknown source {}": "onbekende bron {}",
+  "unknown op {}": "onbekende bewerking {}",
+  "missing {}": "{} ontbreekt",
+  "Search": "Zoeken"
+}
