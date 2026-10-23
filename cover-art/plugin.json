@@ -1,0 +1,30 @@
+{
+ "name": "cover-art",
+ "version": "1.0.0",
+ "author": "OpenFadeR",
+ "homepage": "https://musicbrainz.org/doc/MusicBrainz_API",
+ "description": "Cover art for tracks: MusicBrainz with the Cover Art Archive, the iTunes Search API, and Discogs with your own token",
+ "script": "main.py",
+ "artwork": true,
+ "settings": [
+  {
+   "id": "musicbrainz",
+   "label": "MusicBrainz and Cover Art Archive",
+   "type": "bool",
+   "default": true
+  },
+  {
+   "id": "itunes",
+   "label": "iTunes Search",
+   "type": "bool",
+   "default": true
+  },
+  {
+   "id": "discogs_token",
+   "label": "Discogs token",
+   "type": "secret",
+   "default": "",
+   "help": "Personal access token from discogs.com/settings/developers; Discogs is asked only with one"
+  }
+ ]
+}

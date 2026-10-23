@@ -1,0 +1,14 @@
+[package]
+name = "mixxx"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+openfader-plugin.workspace = true
+serde_json.workspace = true
+# Pure Rust, so the plugin cross-compiles to aarch64 like the others.
+boa_engine = "0.22"
+roxmltree = "0.21"

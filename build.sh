@@ -22,6 +22,6 @@ out=target/release
 py=$(command -v python3 || command -v python)
 for manifest in */plugin.json; do
 	dir=$(dirname "$manifest")
-	lib=$("$py" -c 'import json,sys; print(json.load(open(sys.argv[1]))["library"]["lib"][sys.argv[2]])' "$manifest" "$os" 2>/dev/null) || continue
+	lib=$("$py" -c 'import json,sys; d=json.load(open(sys.argv[1])); print((d.get("library") or d["controller"])["lib"][sys.argv[2]])' "$manifest" "$os" 2>/dev/null) || continue
 	cp "$out/$lib" "$dir/$lib"
 done

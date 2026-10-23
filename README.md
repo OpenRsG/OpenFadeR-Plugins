@@ -32,6 +32,7 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 | `center-lock`, `gate-cue` | knob and pad modes (JSON) |
 | `now-playing`, `mix-log` | events, actions, settings (Python, Lua) |
 | `yt-dlp` | track sources: YouTube / SoundCloud search, playlists and downloads (Python, needs `yt-dlp`; on Windows `winget install -e --id yt-dlp.yt-dlp`, which brings ffmpeg too) |
+| `cover-art` | artwork: cover candidates from MusicBrainz + Cover Art Archive, iTunes Search and (with a token) Discogs (Python) |
 
 ### One stick for every player and app
 
