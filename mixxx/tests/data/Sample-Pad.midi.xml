@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A small mapping written for this plugin's tests: not a real controller's. -->
+<MixxxControllerPreset mixxxVersion="2.4.0" schemaVersion="1">
+    <info>
+        <name>Sample Pad</name>
+        <author>OpenFadeR tests</author>
+    </info>
+    <controller id="Sample Pad">
+        <scriptfiles>
+            <file filename="Sample-Pad-scripts.js" functionprefix="Sample"/>
+        </scriptfiles>
+        <controls>
+            <control>
+                <group>[Channel1]</group>
+                <key>LoadSelectedTrack</key>
+                <status>0x90</status>
+                <midino>0x02</midino>
+                <options><normal/></options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>play</key>
+                <status>0x90</status>
+                <midino>0x01</midino>
+                <options><normal/></options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>hotcue_1_activate</key>
+                <status>0x90</status>
+                <midino>0x10</midino>
+                <options><normal/></options>
+            </control>
+            <control>
+                <group>[Master]</group>
+                <key>crossfader</key>
+                <status>0xB0</status>
+                <midino>0x07</midino>
+                <options><normal/></options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>Sample.jog</key>
+                <status>0xB0</status>
+                <midino>0x20</midino>
+                <options><script-binding/></options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>Sample.touch</key>
+                <status>0x90</status>
+                <midino>0x30</midino>
+                <options><script-binding/></options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>Sample.touch</key>
+                <status>0x80</status>
+                <midino>0x30</midino>
+                <options><script-binding/></options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>rate</key>
+                <status>0xB0</status>
+                <midino>0x08</midino>
+                <options><invert/></options>
+            </control>
+            <control>
+                <group>[Channel1]</group>
+                <key>jog</key>
+                <status>0xB0</status>
+                <midino>0x09</midino>
+                <options><diff/></options>
+            </control>
+        </controls>
+        <outputs>
+            <output>
+                <group>[Channel1]</group>
+                <key>cue_indicator</key>
+                <status>0x90</status>
+                <midino>0x41</midino>
+                <on>0x7f</on>
+                <off>0x00</off>
+                <minimum>0.5</minimum>
+            </output>
+        </outputs>
+    </controller>
+</MixxxControllerPreset>

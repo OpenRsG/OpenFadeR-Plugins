@@ -1,0 +1,26 @@
+{
+  "name": "mixxx",
+  "version": "0.1.0",
+  "description": "Runs Mixxx controller mappings (.midi.xml with their JavaScript files) from your Mixxx folders on a MIDI port.",
+  "controller": {
+    "lib": {
+      "linux": "libmixxx.so",
+      "windows": "mixxx.dll",
+      "macos": "libmixxx.dylib"
+    }
+  },
+  "settings": [
+    {
+      "id": "folder",
+      "label": "Mapping folder",
+      "type": "text",
+      "help": "a folder with .midi.xml files and their scripts, searched before the usual Mixxx folders (~/.mixxx/controllers, /usr/share/mixxx/controllers, …)"
+    },
+    {
+      "id": "mapping",
+      "label": "Mapping",
+      "type": "text",
+      "help": "part of a mapping's name or file name to use on a port you assigned to this plugin when no mapping matches its name"
+    }
+  ]
+}

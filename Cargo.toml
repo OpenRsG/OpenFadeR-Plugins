@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["rekordbox-common", "rekordbox-export", "rekordbox-device", "rekordbox-db", "rekordbox-xml", "itunes", "sample-pack", "engine-dj", "serato", "virtualdj", "traktor"]
+members = ["rekordbox-common", "rekordbox-export", "rekordbox-device", "rekordbox-db", "rekordbox-xml", "itunes", "sample-pack", "engine-dj", "serato", "virtualdj", "traktor", "mixxx"]
 
 [workspace.dependencies]
 openfader-plugin = { path = "../../sdk", features = ["library"] }
