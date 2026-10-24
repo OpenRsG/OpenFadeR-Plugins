@@ -34,6 +34,40 @@ jobs:
       - run: core/extension/plugin/build.sh
       - run: cargo test --release --manifest-path core/extension/plugin/Cargo.toml
 
+  # Other programs' readers (pyrekordbox, and rekordcrate for export.pdb) read a small stick the plugin wrote and must find in it
+  # what was put on it: titles, track and cue counts, playlists. Any difference fails the job.
+  readers:
+    if: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: OpenRsG/OpenFadeR
+          path: core
+      - uses: actions/checkout@v4
+        with:
+          path: core/extension/plugin
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/extension/plugin
+      - run: pip install pyrekordbox==0.5.0
+      - name: Write the fixture stick
+        run: cargo run --release --manifest-path core/extension/plugin/Cargo.toml -p rekordbox-export --example fixture -- "$RUNNER_TEMP/fixture"
+      # A second, independent reader of export.pdb; the job goes on without it when it does not install.
+      - name: Install rekordcrate
+        id: rekordcrate
+        continue-on-error: true
+        run: cargo install rekordcrate --version 0.3.0 --locked
+      - name: Read the stick with the other readers
+        run: |
+          args=()
+          if [ "${{ steps.rekordcrate.outcome }}" = success ]; then args=(--rekordcrate rekordcrate); fi
+          python core/extension/plugin/.github/check_stick.py "$RUNNER_TEMP/fixture" "${args[@]}"
+
   release:
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/') }}
     permissions:

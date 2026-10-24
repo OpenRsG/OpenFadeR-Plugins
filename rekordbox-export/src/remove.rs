@@ -10,8 +10,13 @@ use super::pdb::{
     read,
 };
 use super::settings::DeviceConfig;
-use super::{ONE, PDB, commit, onelibrary::image_variant, open_keyed, put_atomic};
-use openfader_plugin::library::{RemoveReport, RemoveTarget};
+use super::{
+    copy_db, onelibrary::image_variant, open_keyed, verify, write_libraries, ONE, OWNER, PDB,
+};
+use openfader_plugin::library::{
+    commit::{self, Commit},
+    RemoveReport, RemoveTarget,
+};
 use rekordbox_common::at;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -70,6 +75,7 @@ pub fn playlist(
     config: &DeviceConfig,
     key: &str,
 ) -> Result<RemoveReport, String> {
+    commit::recover(dest)?;
     let (mut db, tags) = read::open(dest, config)?;
     if !db.nodes.iter().any(|n| n.id == node) {
         return Err(format!("playlist {node} is not on the device"));
@@ -107,6 +113,7 @@ pub fn tracks(
     config: &DeviceConfig,
     key: &str,
 ) -> Result<RemoveReport, String> {
+    commit::recover(dest)?;
     let (db, tags) = read::open(dest, config)?;
     finish(dest, db, tags, ids, key)
 }
@@ -151,21 +158,33 @@ pub fn histories(
     config: &DeviceConfig,
     key: &str,
 ) -> Result<usize, String> {
+    let mut c = Commit::new(dest, OWNER)?;
     let (mut db, _) = read::open(dest, config)?;
     let before = db.histories.len();
     db.histories.retain(|h| !names.contains(&h.name));
     let one = dest.join(ONE);
     if one.is_file() {
-        let conn = open_keyed(&one, key)?;
-        for n in names {
-            at(conn.execute("delete from history_content where history_id in (select history_id from history where name = ?1)", [n]), &one)?;
-            at(
-                conn.execute("delete from history where name = ?1", [n]),
-                &one,
-            )?;
-        }
+        let staged = Commit::staged_path(&one);
+        copy_db(&one, &staged)?;
+        let edit = || -> Result<(), String> {
+            let conn = open_keyed(&staged, key)?;
+            for n in names {
+                at(conn.execute("delete from history_content where history_id in (select history_id from history where name = ?1)", [n]), &one)?;
+                at(
+                    conn.execute("delete from history where name = ?1", [n]),
+                    &one,
+                )?;
+            }
+            Ok(())
+        };
+        edit()
+            .and_then(|()| c.stage_built(&one))
+            .inspect_err(|_| drop(std::fs::remove_file(&staged)))?;
     }
-    put_atomic(&dest.join(PDB), &db.encode()?)?;
+    let pdb = dest.join(PDB);
+    c.stage(&pdb, &db.encode()?)?;
+    verify::pdb_file(&Commit::staged_path(&pdb), &db)?;
+    c.commit()?;
     Ok(before - db.histories.len())
 }
 
@@ -188,7 +207,7 @@ fn finish(
         h.tracks.retain(|t| !gone.contains(t));
     }
     tags.assigned.retain(|(t, ..)| !gone.contains(t));
-    commit(dest, &db, &tags, key, false)?;
+    write_libraries(Commit::new(dest, OWNER)?, dest, &db, &tags, key, false)?;
 
     let mut r = RemoveReport {
         tracks: removed.len(),

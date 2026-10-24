@@ -33,9 +33,10 @@
 //! opens read-only without `-shm`/`-wal` sidecars (inferred, not tested on a player).
 
 use super::{
-    Names, column_label,
+    column_label,
     pdb::db::{Db, Tags},
     settings::browse::COLUMNS,
+    Names,
 };
 use rekordbox_common::at;
 use rusqlite::{Connection, Transaction, params};
@@ -94,6 +95,188 @@ pub fn write(path: &Path, key: &str, db: &Db, tags: &Tags, library_id: u32) -> R
     }
     let mut conn = super::open_keyed(path, key)?;
     at(fill(&mut conn, db, tags, library_id), path)
+}
+
+/// `/PIONEER/Artwork/00001/b1.jpg` → the `a1.jpg` of `export.pdb` (the inverse of [`image_variant`]).
+pub(super) fn cover_of(b: &str) -> String {
+    let (dir, file) = b.rsplit_once('/').unwrap_or(("", b));
+    format!("{dir}/a{}", file.strip_prefix('b').unwrap_or(file))
+}
+
+/// Reads the OneLibrary at `path` (encrypted with `key`) into the writer's model: the tracks, the playlist tree with its entries,
+/// the play histories and MyTag, so a Device Library can be written from it. The ids are the OneLibrary's own (the playlists and
+/// histories keep theirs). What the model does not hold (cue rows, Hot Cue Bank Lists) stays in the OneLibrary.
+pub fn read(path: &Path, key: &str) -> Result<(Db, Tags), String> {
+    use super::pdb::db::{History, Item, Node};
+    use std::collections::HashSet;
+    let conn = super::open_keyed_ro(path, key)?;
+    let e = |e: rusqlite::Error| format!("{}: {e}", path.display());
+    let names = |sql: &str| -> Result<HashMap<i64, String>, String> {
+        let mut st = conn.prepare(sql).map_err(e)?;
+        let rows = st
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                ))
+            })
+            .map_err(e)?;
+        rows.collect::<Result<_, _>>().map_err(e)
+    };
+    let artists = names("select artist_id, name from artist")?;
+    let albums = names("select album_id, name from album")?;
+    let genres = names("select genre_id, name from genre")?;
+    let keys = names("select key_id, name from \"key\"")?;
+    let images = names("select image_id, path from image")?;
+    let name = |m: &HashMap<i64, String>, id: Option<i64>| {
+        id.and_then(|i| m.get(&i)).cloned().unwrap_or_default()
+    };
+    let mut db = Db {
+        analyze_date: super::today(),
+        ..Db::default()
+    };
+    if let Ok((device, date, background)) = conn.query_row(
+        "select coalesce(deviceName, ''), coalesce(createdDate, ''), coalesce(backGroundColorType, 0) from property",
+        [],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?)),
+    ) {
+        db.config.device_name = device;
+        db.config.background = background.clamp(0, 8) as u8;
+        if !date.is_empty() {
+            db.analyze_date = date;
+        }
+    }
+    let mut st = conn
+        .prepare(
+            "select content_id, title, artist_id_artist, album_id, genre_id, key_id, image_id, color_id, rating, bpmx100, length, \
+             samplingRate, bitrate, fileSize, fileType, djComment, dateAdded, analysisDataFilePath, fileName, path \
+             from content order by content_id",
+        )
+        .map_err(e)?;
+    let items = st
+        .query_map([], |r| {
+            let s = |i: usize| r.get::<_, Option<String>>(i).map(Option::unwrap_or_default);
+            let n = |i: usize| r.get::<_, Option<i64>>(i).map(|v| v.unwrap_or(0));
+            let path = s(19)?;
+            let mut filename = s(18)?;
+            if filename.is_empty() {
+                filename = path.rsplit('/').next().unwrap_or_default().to_owned();
+            }
+            Ok(Item {
+                id: n(0)? as u32,
+                title: s(1)?,
+                artist: name(&artists, r.get(2)?),
+                album: name(&albums, r.get(3)?),
+                genre: name(&genres, r.get(4)?),
+                key: name(&keys, r.get(5)?),
+                artwork: r
+                    .get::<_, Option<i64>>(6)?
+                    .and_then(|i| images.get(&i))
+                    .map(|b| cover_of(b)),
+                color: n(7)?.clamp(0, 8) as u8,
+                rating: n(8)?.clamp(0, 5) as u8,
+                bpm_x100: n(9)?.max(0) as u32,
+                duration_s: n(10)?.clamp(0, i64::from(u16::MAX)) as u16,
+                sample_rate: n(11)?.max(0) as u32,
+                bitrate: n(12)?.max(0) as u32,
+                file_size: n(13)?.clamp(0, i64::from(u32::MAX)) as u32,
+                file_type: n(14)?.clamp(0, i64::from(u16::MAX)) as u16,
+                comment: s(15)?,
+                date_added: s(16)?,
+                analyze_date: String::new(),
+                analyze_path: s(17)?,
+                filename,
+                file_path: path,
+            })
+        })
+        .map_err(e)?;
+    db.tracks = items.collect::<Result<_, _>>().map_err(e)?;
+    let known: HashSet<u32> = db.tracks.iter().map(|t| t.id).collect();
+
+    let mut st = conn
+        .prepare(
+            "select playlist_id, coalesce(name, ''), coalesce(attribute, 0), coalesce(playlist_id_parent, 0) from playlist \
+             order by coalesce(sequenceNo, 0), playlist_id",
+        )
+        .map_err(e)?;
+    let nodes = st
+        .query_map([], |r| {
+            Ok(Node {
+                id: r.get::<_, i64>(0)? as u32,
+                name: r.get(1)?,
+                is_folder: r.get::<_, i64>(2)? == 1,
+                parent: r.get::<_, i64>(3)? as u32,
+                tracks: Vec::new(),
+            })
+        })
+        .map_err(e)?;
+    db.nodes = nodes.collect::<Result<_, _>>().map_err(e)?;
+    let at_node: HashMap<u32, usize> = db
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.id, i))
+        .collect();
+    let mut st = conn
+        .prepare("select playlist_id, content_id from playlist_content order by playlist_id, coalesce(sequenceNo, 0)")
+        .map_err(e)?;
+    let entries = st
+        .query_map([], |r| {
+            Ok((r.get::<_, i64>(0)? as u32, r.get::<_, i64>(1)? as u32))
+        })
+        .map_err(e)?;
+    for entry in entries {
+        let (list, track) = entry.map_err(e)?;
+        if let (Some(&i), true) = (at_node.get(&list), known.contains(&track)) {
+            db.nodes[i].tracks.push(track);
+        }
+    }
+
+    // Histories and MyTag are optional: a library without those tables has none.
+    let pairs = |sql: &str| -> Vec<(i64, String, i64)> {
+        conn.prepare(sql)
+            .and_then(|mut st| {
+                st.query_map([], |r| {
+                    Ok((
+                        r.get(0)?,
+                        r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                        r.get(2)?,
+                    ))
+                })?
+                .collect()
+            })
+            .unwrap_or_default()
+    };
+    db.histories = pairs("select history_id, coalesce(name, ''), 0 from history where coalesce(attribute, 0) = 0 order by coalesce(sequenceNo, 0), history_id")
+        .into_iter()
+        .map(|(id, name, _)| History { id: id as u32, name, tracks: Vec::new() })
+        .collect();
+    for (h, _, t) in pairs("select history_id, '', content_id from history_content order by history_id, coalesce(sequenceNo, 0)") {
+        if let Some(x) = db.histories.iter_mut().find(|x| i64::from(x.id) == h) {
+            if known.contains(&(t as u32)) {
+                x.tracks.push(t as u32);
+            }
+        }
+    }
+    let mut tags = Tags::default();
+    let cats = pairs("select myTag_id, coalesce(name, ''), 0 from myTag where attribute = 1 order by coalesce(sequenceNo, 0), myTag_id");
+    let mut at_tag: HashMap<i64, (usize, usize)> = HashMap::new();
+    for (c, (id, name, _)) in cats.iter().enumerate() {
+        let mine = pairs(&format!("select myTag_id, coalesce(name, ''), 0 from myTag where attribute = 0 and myTag_id_parent = {id} order by coalesce(sequenceNo, 0), myTag_id"));
+        for (i, (tag, ..)) in mine.iter().enumerate() {
+            at_tag.insert(*tag, (c, i));
+        }
+        tags.categories
+            .push((name.clone(), mine.into_iter().map(|t| t.1).collect()));
+    }
+    for (tag, _, track) in
+        pairs("select myTag_id, '', content_id from myTag_content order by myTag_id, content_id")
+    {
+        if let (Some(&(c, i)), true) = (at_tag.get(&tag), known.contains(&(track as u32))) {
+            tags.assigned.push((track as u32, c, i));
+        }
+    }
+    Ok((db, tags))
 }
 
 fn fill(conn: &mut Connection, db: &Db, tags: &Tags, library_id: u32) -> rusqlite::Result<()> {

@@ -109,6 +109,15 @@ pub fn load_track(dat: &std::path::Path) -> Result<Analysis, String> {
     Ok(a)
 }
 
+/// How many cues (hot, memory, loops) the bytes of a `.DAT` hold, with those of its `.EXT` when given.
+pub fn count_cues(dat: &[u8], ext: Option<&[u8]>) -> Result<usize, String> {
+    let mut a = parse(dat)?;
+    if let Some(x) = ext {
+        cues::merge_cues(&mut a.cues, parse(x)?.cues);
+    }
+    Ok(a.cues.len())
+}
+
 /// Synthetic-file builders shared by the child tests.
 #[cfg(test)]
 mod testutil {
