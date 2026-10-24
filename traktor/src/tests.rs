@@ -472,7 +472,10 @@ fn a_file_that_is_no_collection_is_never_overwritten() {
     for bad in ["<NML><COLLECTION>", "<html><body/></html>", "not xml"] {
         std::fs::write(root.join(FILE), bad).unwrap();
         let err = run(&root, &snap_ab(&src), &ExportOptions::default(), false).unwrap_err();
-        assert!(err.contains("left as it is"), "{err}");
+        assert!(
+            err.contains("cannot be read") && err.contains("stays as it is"),
+            "{err}"
+        );
         assert_eq!(std::fs::read_to_string(root.join(FILE)).unwrap(), bad);
     }
 }
@@ -492,7 +495,7 @@ fn cancel_and_a_full_stick_leave_the_stick_as_it_was() {
         ..ExportOptions::default()
     };
     let err = run(&root, &snap, &tight, false).unwrap_err();
-    assert!(err.contains("not enough space"), "{err}");
+    assert!(err.contains("Not enough space"), "{err}");
     assert!(!root.join("Contents").exists() && !root.join(FILE).exists());
 
     // A cancel after a first export keeps that file.
@@ -538,7 +541,10 @@ fn the_device_probe_sees_the_library_it_wrote() {
         (before.libraries.len(), before.can_write, before.modified),
         (0, true, None)
     );
-    assert_eq!(before.features, [Feature::Export]);
+    assert_eq!(
+        before.features,
+        [Feature::Export, Feature::Plan, Feature::Check]
+    );
     run(&root, &snap_ab(&src), &ExportOptions::default(), false).unwrap();
     let after = Plugin::device_probe(&root, &Value::Null).unwrap();
     assert_eq!(after.libraries, [LIBRARY]);

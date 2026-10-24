@@ -1,8 +1,16 @@
 //! Fixtures: tiny audio files with the metadata layouts the plugin edits, a snapshot, and independent decoders of what it writes.
 #![allow(dead_code)]
 
-use openfader_plugin::library::{Analysis, Beat, Cue, Playlist, Snapshot, Track};
+use openfader_plugin::library::{
+    host::{self, Host, HostRequest},
+    Analysis, Beat, Buf, Cue, ExportOptions, ExportReport, LibraryPlugin, Playlist, Snapshot,
+    Track,
+};
+use serde_json::{json, Value};
+use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 pub fn tmp(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("serato-test-{}-{name}", std::process::id()));
@@ -409,4 +417,173 @@ pub fn assert_standard(markers: &[(String, Vec<u8>)], grid: &[u8], cue_ms: u32) 
         (g[0].0 - 0.25).abs() < 1e-6 && (g[0].1 - 120.0).abs() < 1e-3,
         "{g:?}"
     );
+}
+
+// ---- A fake host: progress reports, cancels, and what the user would read ------------------------------------------------
+
+thread_local! {
+    /// Cancel once a progress report names this phase with at least this many items done.
+    static CANCEL_AT: RefCell<Option<(String, usize)>> = const { RefCell::new(None) };
+    static SEEN: RefCell<Vec<(String, usize, u64, u64)>> = const { RefCell::new(Vec::new()) };
+}
+
+unsafe extern "C" fn call(req: *const u8, len: usize) -> Buf {
+    // SAFETY: `req`/`len` are the plugin's request buffer (see `host::ask`).
+    let req: HostRequest =
+        serde_json::from_slice(unsafe { std::slice::from_raw_parts(req, len) }).unwrap();
+    let v: Value = match req {
+        HostRequest::Analysis { .. } => json!({ "analysis": null }),
+        HostRequest::AudioInfo { .. } => json!({ "sample_rate": 44100 }),
+        HostRequest::Progress {
+            phase,
+            done,
+            bytes_done,
+            bytes_total,
+            ..
+        } => {
+            let cancel = CANCEL_AT.with(|c| {
+                c.borrow()
+                    .as_ref()
+                    .is_some_and(|(p, n)| *p == phase && done >= *n)
+            });
+            SEEN.with(|s| s.borrow_mut().push((phase, done, bytes_done, bytes_total)));
+            json!({ "cancel": cancel })
+        }
+    };
+    let out = serde_json::to_vec(&v).unwrap().into_boxed_slice();
+    let len = out.len();
+    Buf {
+        ptr: Box::into_raw(out).cast::<u8>(),
+        len,
+    }
+}
+
+unsafe extern "C" fn free(buf: Buf) {
+    // SAFETY: `buf` is an answer of `call`, freed once.
+    drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(buf.ptr, buf.len)) });
+}
+
+/// Runs `f` as a job served by the fake host: no cancel until [`cancel_at`], every progress report is recorded.
+pub fn with_host<R>(f: impl FnOnce() -> R) -> R {
+    CANCEL_AT.with(|c| *c.borrow_mut() = None);
+    SEEN.with(|s| s.borrow_mut().clear());
+    host::serving(&Host { call, free }, f)
+}
+
+/// The user cancels the job at the first report of `phase`.
+pub fn cancel_at(phase: &str) {
+    cancel_at_item(phase, 0);
+}
+
+/// The user cancels the job at the report of `phase` that says `done` items are finished.
+pub fn cancel_at_item(phase: &str, done: usize) {
+    CANCEL_AT.with(|c| *c.borrow_mut() = Some((phase.to_owned(), done)));
+}
+
+/// `(phase, done, bytes_done, bytes_total)` of every progress report of the last job on this thread.
+pub fn reports() -> Vec<(String, usize, u64, u64)> {
+    SEEN.with(|s| s.borrow().clone())
+}
+
+/// Panics unless the host would show `text` in every language of the plugin's `locales/` (the rule of the host's `locale.rs`: the
+/// text itself is a key, or matches a key whose `{}` stand for values of at least one character).
+pub fn assert_translated(text: &str) {
+    fn matches(key: &str, text: &str) -> bool {
+        let parts: Vec<&str> = key.split("{}").collect();
+        let (first, rest) = parts.split_first().unwrap();
+        let Some((last, middle)) = rest.split_last() else {
+            return false;
+        };
+        let Some(mut s) = text.strip_prefix(first).and_then(|t| t.strip_suffix(last)) else {
+            return false;
+        };
+        for part in middle {
+            let start = s.char_indices().nth(1).map_or(s.len(), |(i, _)| i);
+            match s.get(start..).and_then(|r| r.find(part)) {
+                Some(i) => s = &s[start + i + part.len()..],
+                None => return false,
+            }
+        }
+        !s.is_empty()
+    }
+    for lang in ["de", "es", "fr", "it", "nl", "pt"] {
+        let file = format!("{}/locales/{lang}.json", env!("CARGO_MANIFEST_DIR"));
+        let map: std::collections::HashMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        let found = map.get(text).is_some_and(|t| !t.is_empty())
+            || map
+                .iter()
+                .any(|(k, v)| !v.is_empty() && k.contains("{}") && matches(k, text));
+        assert!(found, "{lang} has no translation of: {text}");
+    }
+}
+
+/// An export under the fake host; every text it answers the user with must be translated.
+pub fn export_host(
+    usb: &Path,
+    snap: &Snapshot,
+    opts: &ExportOptions,
+) -> Result<ExportReport, String> {
+    let out = with_host(|| serato::Plugin::export(usb, snap, opts, &Value::Null));
+    assert_answer_translated(&out);
+    out
+}
+
+/// Every text of an export answer is translated.
+pub fn assert_answer_translated(out: &Result<ExportReport, String>) {
+    match out {
+        Ok(r) => r
+            .warnings
+            .iter()
+            .chain(&r.notes)
+            .chain(r.plan.iter().flat_map(|p| &p.blocked))
+            .for_each(|t| assert_translated(t)),
+        Err(e) => {
+            if e != "cancelled" && !e.contains("injected") {
+                assert_translated(e)
+            }
+        }
+    }
+}
+
+// ---- The tree of a device --------------------------------------------------------------------------------------------------
+
+/// Every file and folder below `root` (folders end in `/`) with the bytes and the time of change of the files.
+pub fn tree(root: &Path) -> BTreeMap<String, (Vec<u8>, Option<SystemTime>)> {
+    fn walk(base: &Path, dir: &Path, out: &mut BTreeMap<String, (Vec<u8>, Option<SystemTime>)>) {
+        let Ok(rd) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in rd.flatten() {
+            let p = e.path();
+            let rel = p
+                .strip_prefix(base)
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            if p.is_dir() {
+                out.insert(format!("{rel}/"), (Vec::new(), None));
+                walk(base, &p, out);
+            } else {
+                let t = std::fs::metadata(&p).and_then(|m| m.modified()).ok();
+                out.insert(rel, (std::fs::read(&p).unwrap(), t));
+            }
+        }
+    }
+    let mut out = BTreeMap::new();
+    walk(root, root, &mut out);
+    out
+}
+
+/// A copy of the tree at `from` (files keep their bytes, not their times).
+pub fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for e in std::fs::read_dir(from).unwrap().flatten() {
+        let t = to.join(e.file_name());
+        if e.path().is_dir() {
+            copy_tree(&e.path(), &t);
+        } else {
+            std::fs::copy(e.path(), t).unwrap();
+        }
+    }
 }

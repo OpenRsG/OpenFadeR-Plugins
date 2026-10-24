@@ -393,6 +393,24 @@ impl Reader {
         }
     }
 }
+/// What `export` and `device_check` read back from a database.
+impl Reader {
+    pub(crate) fn song_count(&self) -> usize {
+        self.songs.len()
+    }
+
+    /// Hot cues, memory cues and loops of the song whose `FilePath` is `file_path`.
+    pub(crate) fn cue_count(&self, file_path: &str) -> usize {
+        self.analysis_of(file_path).map_or(0, |a| a.cues.len())
+    }
+
+    /// `(playlist id, list file)` of every list found next to the database.
+    pub(crate) fn list_files(&self) -> impl Iterator<Item = (&str, &Path)> {
+        self.files
+            .iter()
+            .map(|(id, (f, _))| (id.as_str(), f.as_path()))
+    }
+}
 
 impl Source for Reader {
     fn kind(&self) -> String {
