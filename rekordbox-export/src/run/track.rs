@@ -178,7 +178,13 @@ impl Job<'_> {
                 t.key.clone()
             },
             artwork,
-            color: self.colors.get(&plan.i).copied().unwrap_or(0),
+            // A track the device has keeps its colour when the snapshot gives none (a stick's own track written back).
+            color: self
+                .colors
+                .get(&plan.i)
+                .copied()
+                .or(old.map(|o| o.color))
+                .unwrap_or(0),
             rating: t.rating,
             bpm_x100: if t.bpm_x100 > 0 {
                 t.bpm_x100 as u32
