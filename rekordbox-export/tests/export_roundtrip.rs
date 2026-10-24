@@ -334,6 +334,18 @@ fn snapshot_edits_colours_user_playlists_and_mytag_are_exported() {
     assert_eq!(analysis_of(&d.dest, a).cues, edited);
     assert_eq!(in_playlist(&db, "My set"), ["Beta", "Alpha é"]);
     assert!(d.dest.join("PIONEER/rekordbox/exportExt.pdb").is_file());
+
+    // Written again without colours (a stick's own track saved back after a cue edit): the device keeps its colour.
+    snap.colors.clear();
+    export(&d.dest, &snap, &ExportOptions::default(), None).unwrap();
+    assert_eq!(
+        crate::db(&d.dest)
+            .tracks
+            .iter()
+            .map(|t| t.color)
+            .collect::<Vec<_>>(),
+        [2, 0]
+    );
 }
 
 #[test]
