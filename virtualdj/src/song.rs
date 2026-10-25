@@ -1,6 +1,6 @@
 //! One `<Song>` of `database.xml`: built from a track and its analysis, or refreshed in place. Elements and attributes of an
 //! existing song that this plugin does not write (play counts, colours, automix points, remix points, a newer VirtualDJ's
-//! additions) are kept.
+//! additions) are kept. A hot cue or memory cue `<Poi>` has no `Type` (the default of VirtualDJ's POI editor).
 //!
 //! Sources: the element and attribute names are VDJPedia's "VDJ_database" (https://virtualdj.com/wiki/VDJ_database.html);
 //! `Bpm` is the time between two beats in seconds (same page); a hot cue is `<Poi Name Pos Num>` with `Pos` in seconds and
@@ -202,7 +202,8 @@ fn pois(
         if let Some(rgb) = c.color {
             p.set("Color", color(rgb));
         }
-        p.set("Type", "cue");
+        // No `Type`: VirtualDJ's POI editor makes a hot cue the default type and its own databases write none (VDJPedia, forum
+        // thread 228599); `cue` is not a type it names.
         if let Some(end) = c.loop_end_ms.filter(|e| *e > c.time_ms) {
             match period(bpm_x100) {
                 Some(period) => {
