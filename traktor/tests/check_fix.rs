@@ -108,12 +108,13 @@ fn audio_the_collection_lists_but_the_stick_lacks_is_an_error_naming_the_files()
 
 #[test]
 fn entries_of_other_volumes_are_not_checked() {
+    // A volume no test root can be on ("C:" is the temporary folder's own drive on Windows).
     let r = Root::new("foreign");
     stick(&r);
     let nml = std::fs::read_to_string(r.dev().join(FILE)).unwrap();
     let foreign = nml.replacen(
         "<COLLECTION ENTRIES=\"4\">",
-        "<COLLECTION ENTRIES=\"5\">\n<ENTRY TITLE=\"X\"><LOCATION DIR=\"/:Users/:dj/:Music/:\" FILE=\"x.mp3\" VOLUME=\"C:\"/></ENTRY>",
+        "<COLLECTION ENTRIES=\"5\">\n<ENTRY TITLE=\"X\"><LOCATION DIR=\"/:Users/:dj/:Music/:\" FILE=\"x.mp3\" VOLUME=\"Macintosh HD\"/></ENTRY>",
         1,
     );
     assert_ne!(nml, foreign);
