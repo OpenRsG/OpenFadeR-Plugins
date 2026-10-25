@@ -119,7 +119,7 @@ fn writes_songs_cues_grid_and_lists() {
             Some("10.000000"),
             Some("Drop"),
             Some("4294901760"),
-            Some("cue")
+            None
         )
     );
     let l3 = poi(a, "Num", "3");
@@ -142,7 +142,7 @@ fn writes_songs_cues_grid_and_lists() {
     let mem = poi(a, "Pos", "5.000000");
     assert_eq!(
         (mem.attr("Num"), mem.attr("Type"), mem.attr("Color")),
-        (Some("-1"), Some("cue"), None)
+        (Some("-1"), None, None)
     );
     let mloop = poi(a, "Pos", "30.000000");
     assert_eq!(
@@ -425,7 +425,7 @@ fn missing_audio_is_skipped_and_a_loop_without_tempo_becomes_a_cue() {
     );
     let songs = songs(&stick.0);
     let c = poi(&songs[0], "Num", "2");
-    assert_eq!((c.attr("Type"), c.attr("Size")), (Some("cue"), None));
+    assert_eq!((c.attr("Type"), c.attr("Size")), (None, None));
     assert_eq!(child(&songs[0], "Tags").attr("Bpm"), None);
     assert_eq!(
         list_songs(&stick.join("VirtualDJ/MyLists/L.vdjfolder")).len(),

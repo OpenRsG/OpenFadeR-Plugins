@@ -45,9 +45,21 @@ pub fn dir_file(rel: &str) -> (String, String) {
     (d, file.into())
 }
 
-/// `MUSICAL_KEY VALUE` of a Camelot ("8A") or note ("Am", "F#m", "Bb") key; `None` for anything else.
+/// `MUSICAL_KEY VALUE` of a Camelot ("8A"), Open Key ("10m", "3d": what Traktor's own `INFO KEY` and so a Traktor source's
+/// `Track::key` hold) or note ("Am", "F#m", "Bb") key; `None` for anything else.
 pub fn musical_key(s: &str) -> Option<u8> {
     let s = s.trim();
+    for (suffix, minor) in [('m', true), ('d', false)] {
+        if let Some(n) = s
+            .strip_suffix(suffix)
+            .and_then(|n| n.parse::<i32>().ok())
+            .filter(|n| (1..=12).contains(n))
+        {
+            // Open Key 1d is C major and 1m A minor; every step is a fifth.
+            let pc = ((7 * (n - 1)).rem_euclid(12) + if minor { 9 } else { 0 }) % 12;
+            return Some(pc as u8 + if minor { 12 } else { 0 });
+        }
+    }
     for (suffix, minor) in [(['A', 'a'], true), (['B', 'b'], false)] {
         if let Some(n) = s
             .strip_suffix(suffix)
@@ -266,6 +278,10 @@ mod tests {
         assert_eq!(musical_key("Bb"), Some(10));
         assert_eq!(musical_key("Abm"), Some(20));
         assert_eq!(musical_key("13A"), None);
+        // Open Key (a Traktor source's own key text) names the same keys as `open_key` writes.
+        assert_eq!(musical_key("10m"), Some(12));
+        assert_eq!(musical_key("12d"), Some(5));
+        assert!((0..24).all(|v| musical_key(&open_key(v)) == Some(v)));
         assert_eq!(musical_key(""), None);
         // Every Camelot key maps to its own value.
         let all: std::collections::BTreeSet<_> = (1..=12)
@@ -273,6 +289,21 @@ mod tests {
             .filter_map(|k| musical_key(&k))
             .collect();
         assert_eq!(all.len(), 24);
+    }
+
+    #[test]
+    fn a_traktor_source_key_is_written_back_as_its_musical_key() {
+        let t = Track {
+            key: "10m".into(),
+            ..Track::default()
+        };
+        let now = chrono::NaiveDate::from_ymd_opt(2024, 3, 5)
+            .unwrap()
+            .and_hms_opt(1, 2, 3)
+            .unwrap();
+        let e = entry("V", "Contents/a.wav", 1, &t, None, None, now, &mut Vec::new());
+        assert_eq!(e.child("MUSICAL_KEY").unwrap().get("VALUE"), Some("12"));
+        assert_eq!(e.child("INFO").unwrap().get("KEY"), Some("10m"));
     }
 
     #[test]
