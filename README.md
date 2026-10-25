@@ -8,7 +8,7 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/github/license/OpenRsG/OpenFadeR-Plugins"></a>
 </p>
 
-Plugins for [OpenFadeR](https://github.com/OpenRsG/OpenFadeR), the open-source DJ app: libraries, devices, effects, pad and knob modes, events and track sources. One folder per plugin, each with its `plugin.json`. Native plugins are Rust crates, the rest are JSON, Lua or Python.
+Plugins for [OpenFadeR](https://github.com/OpenRsG/OpenFadeR), the open-source DJ app: libraries, devices, effects, pad and knob modes, events and track sources. One folder per plugin, each with its `plugin.json`. Native plugins are Rust crates, the rest are JSON or Python.
 
 ## Install in one click
 
@@ -30,7 +30,7 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 | `rekordbox-common`, `rekordbox-export` | Rust crates shared by the plugins above |
 | `beat-fx`, `mic-fx`, `send-fx`, `lever-fx`, `cross-pass`, `soft-mix`, `tutorial-fx` | effects (JSON) |
 | `center-lock`, `gate-cue` | knob and pad modes (JSON) |
-| `now-playing`, `mix-log` | events, actions, settings (Python, Lua) |
+| `now-playing` | events, actions, settings (Python) |
 | `yt-dlp` | track sources: YouTube / SoundCloud search, playlists and downloads (Python, needs `yt-dlp`; on Windows `winget install -e --id yt-dlp.yt-dlp`, which brings ffmpeg too) |
 | `cover-art` | artwork: cover candidates from MusicBrainz + Cover Art Archive, iTunes Search and (with a token) Discogs (Python) |
 
