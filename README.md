@@ -10,6 +10,8 @@
 
 Plugins for [OpenFadeR](https://github.com/OpenRsG/OpenFadeR), the open-source DJ app: libraries, devices, effects, pad and knob modes, events and track sources. One folder per plugin, each with its `plugin.json`. Native plugins are Rust crates, the rest are JSON or Python.
 
+The rekordbox extensions (`rekordbox-device`, `rekordbox-xml`, `rekordbox-db`) are not here: they are built into the app (`crates/rekordbox-*` of the core repository), always on, with nothing to install. `itunes` and `sample-pack` still use the helpers of `crates/rekordbox-common`.
+
 ## Install in one click
 
 In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in the list on first run. INSTALL installs one plugin, INSTALL ALL all of them. Native plugins come prebuilt from this repository's latest release.
@@ -18,16 +20,12 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 
 | Plugin | Kind |
 |---|---|
-| `rekordbox-xml` | library: reads and writes a rekordbox XML collection |
-| `rekordbox-device` | library + device: rekordbox Device Library (`export.pdb`, ANLZ files; rekordbox 5 to 7, every CDJ / XDJ) and OneLibrary (`exportLibrary.db`, built-in key; rekordbox 7 and the newest players, a device option), on USB sticks and SD cards: read, export, update, remove, convert, player settings, backups |
 | `engine-dj` | library + device: Engine DJ library (`Engine Library/Database2/m.db`: tracks, grid, hot cues, loops, waveform overview, playlists) for Denon DJ, Numark and RANE players and Engine DJ; reads the desktop or a stick's library (schema 2.18.0 to 3.x); a new library is schema 3.0.0 (Engine 4.1 and newer) or 2.18.0 (Engine 2.0 to 4.0.1, device option), an existing one of schema 2.18.0 to 3.0.2 is extended as it is |
 | `serato` | library + device: Serato DJ library (`_Serato_/database V2`, crates; cues, loops, colour and grid in the audio tags; a private copy only when the tags do not fit the shared file); reads `~/Music/_Serato_` or a stick's |
 | `virtualdj` | library + device: VirtualDJ database (`database.xml`: tags, grid, hot cues, memory cues, loops; lists in `MyLists`); reads the desktop or a drive's |
 | `traktor` | library + device: Traktor collection (`collection.nml`, NML 19: tags, grid, hot and memory cues, loops, playlists); reads the desktop collection or a stick's, and merges into an existing one for Traktor's Import another Collection |
-| `rekordbox-db` | library: the rekordbox desktop collection (`master.db`, smart playlists; key and path map as settings) |
 | `itunes` | library: an iTunes / Music `Library.xml` |
 | `sample-pack` | library: sampler packs (`.spp`) |
-| `rekordbox-common`, `rekordbox-export` | Rust crates shared by the plugins above |
 | `beat-fx`, `mic-fx`, `send-fx`, `lever-fx`, `cross-pass`, `soft-mix`, `tutorial-fx` | effects (JSON) |
 | `center-lock`, `gate-cue` | knob and pad modes (JSON) |
 | `now-playing` | events, actions, settings (Python) |
@@ -36,7 +34,7 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 
 ### A stick you can trust (Engine DJ, Serato, Traktor, VirtualDJ)
 
-`engine-dj`, `serato`, `traktor` and `virtualdj` give the same guarantees as the rekordbox plugin when they write a stick:
+`engine-dj`, `serato`, `traktor` and `virtualdj` give the same guarantees as the app's built-in rekordbox extension (see the core repository's `docs/plugins.md`) when they write a stick:
 
 - **All or nothing.** One export is one `Commit` of the SDK: the library files (Engine DJ `m.db`; Serato `database V2` and every crate; Traktor `collection.nml`; VirtualDJ `database.xml` and its list files) are staged beside their targets as `*.ofnew`, flushed, read back, then switched in one journalled step (`/.openfader/journal.json`). Pulled out at any point, the stick holds the old library or the new one, never a mix; the next write finishes or rolls back an interrupted switch first. A cancel or an error removes every file and folder the run made and leaves the stick byte-identical (Serato's tag edits of audio that was already there are put back).
 - **Read back before it counts.** The staged library is read again with the plugin's own reader (tracks, playlists and their entries, cues and loops where the format holds them). A difference stops the export with a plain sentence, the old library stays, and a clean export reports `verified`.
@@ -46,24 +44,11 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 
 ### One stick for every player and app
 
-The five device plugins write side by side on the same stick and share one copy of each audio file (`Contents/<artist>/<album>/<file>`). In the app's device window (also opened by the USB icon of a connected stick in the browser), the DEVICES tab asks what the stick is for: UNIVERSAL writes every format, DEDICATED only the ticked ones. Each format says which software and players read it and shows its options (rekordbox: OneLibrary on or off). By default the formats are those already on the stick, or all of them on an empty stick. A stick written by rekordbox is extended, not duplicated, because its audio files are found by name and size. None of the four new formats has been tried on real hardware or in the vendor apps yet: please report what does not load.
-
-### A stick you can trust (rekordbox)
-
-What `rekordbox-device` guarantees when it writes a stick, and how that is checked:
-
-- **All or nothing.** One user action (export, sync, remove, player settings) is one transaction. New audio and analysis files are written and fsynced first, the changed library files are staged beside their targets, then switched in one journalled step. Pulled out at any point, the stick holds the old libraries or the new ones, never a mix; the next write or `device_check` finishes or rolls back an interrupted switch first. A cancel or an error leaves the folder as it was.
-- **Read back before it counts.** Before the switch the staged Device Library and OneLibrary are read again and compared with what was meant to be written (titles, counts, playlists and their entries, cue counts in the analysis files). A difference stops the export with a plain sentence and nothing changed; a clean export reports `verified`.
-- **Dry run.** An export with `dry_run` writes nothing and returns the plan: tracks to add or update, bytes to copy and write, files, and what is blocked (no room, a file over the file system's limit, a name the stick cannot hold, too many playlists).
-- **Names the file system accepts.** Long, accented, emoji and reserved (`CON`, `NUL`, ...) names are cleaned; a device path never exceeds the 255 characters a Device Library row holds.
-- **Check and fix.** `device_check` reads what is on a stick without writing and lists problems (missing or unreadable library, the two libraries disagreeing, missing audio or analysis files, leftovers of an interrupted write) with cause, consequence and action. `device_fix` repairs one of them: rebuild one library from the other, rewrite the analysis files, clean leftovers.
-- **Players.** `rekordbox-device/players.json` lists the players the checker knows, what each reads and what is only inferred. [COMPATIBILITY.md](COMPATIBILITY.md) says which rows are confirmed on hardware (none yet) and which are not.
-
-Readers that are not ours check the output in CI (job `readers`): `rekordbox-export/examples/fixture.rs` writes a small stick (unicode, emoji and long names, cues, loops, a playlist folder), and `.github/check_stick.py` reads it with pyrekordbox (the analysis files and `exportLibrary.db`), with a small DeviceSQL reader and with `rekordcrate` (`export.pdb`), and fails on any difference from the manifest. Locally: `cargo run --release -p rekordbox-export --example fixture -- /tmp/fx && pip install pyrekordbox==0.5.0 && python .github/check_stick.py /tmp/fx`. rekordcrate 0.3.0 cannot parse cue entries of type 1, so it is used for `export.pdb` only.
+The device plugins here and the app's built-in rekordbox extension write side by side on the same stick and share one copy of each audio file (`Contents/<artist>/<album>/<file>`). In the app's device window (also opened by the USB icon of a connected stick in the browser), the DEVICES tab asks what the stick is for: UNIVERSAL writes every format, DEDICATED only the ticked ones. Each format says which software and players read it and shows its options (rekordbox: OneLibrary on or off). By default the formats are those already on the stick, or all of them on an empty stick. A stick written by rekordbox is extended, not duplicated, because its audio files are found by name and size. None of the four new formats has been tried on real hardware or in the vendor apps yet: please report what does not load.
 
 ## Build from source
 
-The native plugins form one Cargo workspace built against the SDK of the core repository, found at `../../sdk`. Check this repository out as `extension/plugin/` inside a core checkout (the core's `start.sh` does it), then:
+The native plugins form one Cargo workspace built against the SDK and the `rekordbox-common` crate of the core repository, found at `../../sdk` and `../../crates/rekordbox-common`. Check this repository out as `extension/plugin/` inside a core checkout (the core's `start.sh` does it), then:
 
 ```sh
 ./build.sh        # cargo build --release, then each library is copied next to its plugin.json

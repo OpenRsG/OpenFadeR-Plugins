@@ -1213,48 +1213,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rekordbox-db"
-version = "0.1.0"
-dependencies = [
- "openfader-plugin",
- "rekordbox-common",
- "rusqlite",
- "serde_json",
-]
-
-[[package]]
-name = "rekordbox-device"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "openfader-plugin",
- "rekordbox-common",
- "rekordbox-export",
- "rusqlite",
- "serde_json",
-]
-
-[[package]]
-name = "rekordbox-export"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "openfader-plugin",
- "rekordbox-common",
- "rusqlite",
- "serde_json",
-]
-
-[[package]]
-name = "rekordbox-xml"
-version = "0.1.0"
-dependencies = [
- "openfader-plugin",
- "rekordbox-common",
- "serde_json",
-]
-
-[[package]]
 name = "roxmltree"
 version = "0.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
