@@ -240,7 +240,7 @@ fn write_then_read_returns_the_edited_settings() {
     c.set("dat.language", "131").unwrap();
     c.set("dat.waveform_color", "4").unwrap();
     c.write_files(&dir).unwrap();
-    let back = DeviceConfig::read(&dir).unwrap();
+    let back = DeviceConfig::read(&dir.join(DIR)).unwrap();
     assert_eq!(back.get("dat.language").unwrap(), "131");
     assert_eq!(back.get("dat.waveform_color").unwrap(), "4");
     assert_eq!(back.settings, c.settings);

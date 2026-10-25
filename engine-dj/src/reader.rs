@@ -73,8 +73,23 @@ pub fn open(path: &Path) -> Result<Box<dyn Source>, String> {
 fn open_engine(path: &Path) -> Result<Engine, String> {
     let file = locate(path)
         .ok_or_else(|| format!("{}: no Engine Library/Database2/m.db here", path.display()))?;
+    open_at(&file, false)
+}
+
+/// Opens the database file `file` itself (in a `Database2` folder, whatever its name: a staged `m.db.ofnew` too). `immutable`:
+/// as [`crate::schema::open_immutable`], for a file on a device that must not be touched.
+pub fn open_file(file: &Path, immutable: bool) -> Result<Box<dyn Source>, String> {
+    Ok(Box::new(open_at(file, immutable)?))
+}
+
+fn open_at(file: &Path, immutable: bool) -> Result<Engine, String> {
     let err = |e: rusqlite::Error| format!("{}: {e}", file.display());
-    let db = Connection::open_with_flags(&file, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(err)?;
+    let db = if immutable {
+        crate::schema::open_immutable(file)
+    } else {
+        Connection::open_with_flags(file, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    }
+    .map_err(err)?;
     let (uuid, major, minor, patch): (Option<String>, i64, i64, i64) = db
         .query_row(
             "SELECT uuid, schemaVersionMajor, schemaVersionMinor, schemaVersionPatch FROM Information",
@@ -98,7 +113,7 @@ fn open_engine(path: &Path) -> Result<Engine, String> {
         db,
         uuid: uuid.unwrap_or_default(),
         base,
-        file,
+        file: file.to_path_buf(),
     })
 }
 

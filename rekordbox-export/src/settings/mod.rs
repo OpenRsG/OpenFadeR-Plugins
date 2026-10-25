@@ -28,7 +28,6 @@ pub use file::Settings;
 pub use schema::schema;
 
 use openfader_plugin::library::{SettingsRead, SettingsWritten};
-use rekordbox_common::at;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -318,14 +317,14 @@ impl DeviceConfig {
         f
     }
 
-    /// Writes [`Self::files`] into `dir` (`<device>/PIONEER`, created when missing).
-    pub fn write_files(&self, dir: &Path) -> Result<(), String> {
-        at(std::fs::create_dir_all(dir), dir)?;
+    /// Writes [`Self::files`] into `<root>/PIONEER` (created when missing), all or nothing: they switch together
+    /// ([`openfader_plugin::library::commit`]).
+    pub fn write_files(&self, root: &Path) -> Result<(), String> {
+        let mut c = openfader_plugin::library::commit::Commit::new(root, crate::OWNER)?;
         for (name, bytes) in self.files() {
-            let p = dir.join(name);
-            at(std::fs::write(&p, bytes), &p)?;
+            c.stage(&root.join(DIR).join(name), &bytes)?;
         }
-        Ok(())
+        c.commit()
     }
 
     /// The default configuration with the `.DAT` files of `dir` (`<device>/PIONEER`) read back: what the player changed on
@@ -412,7 +411,7 @@ pub fn write(
     let dir = root.join(DIR);
     let mut cfg = DeviceConfig::from_values(values);
     cfg.auto_apply = true;
-    cfg.write_files(&dir)?;
+    cfg.write_files(root)?;
     Ok(SettingsWritten {
         fingerprint: fingerprint(&dir),
     })

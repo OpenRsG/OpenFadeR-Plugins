@@ -1,8 +1,9 @@
 //! The database file: its schema versions (3.0.0 and 2.18.0 for a new library, DDL of libdjinterop `schema_3_0_0.cpp::create` and
-//! [`crate::schema_2`]; ten versions of the 2.x and 3.x lines extended in place), creating it, opening an existing one for a
-//! merge, and swapping the result in.
+//! [`crate::schema_2`]; ten versions of the 2.x and 3.x lines extended in place), reading the library on the device without
+//! writing to it, and building the staged file the commit switches in.
 
 use crate::schema_2;
+use openfader_plugin::library::commit::Commit;
 use rusqlite::{params, Connection, OpenFlags};
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
@@ -26,7 +27,7 @@ pub const NEW: [Version; 2] = [CURRENT, OLDEST];
 /// are valid for each: 3.0.1 only changes triggers and 3.0.2 adds the nullable `Track.albumArtSourceHash` column (libdjinterop
 /// `schema_3_0_1.cpp`, `schema_3_0_2.cpp`), which stays NULL; the 2.x line is covered by [`has_edit_time`] and the `PerformanceData`
 /// view of [`crate::schema_2`].
-const EXTENDED: [Version; 10] = [
+pub const EXTENDED: [Version; 10] = [
     (2, 18, 0),
     (2, 20, 1),
     (2, 20, 2),
@@ -210,61 +211,132 @@ fn uuid() -> String {
     )
 }
 
-/// The library file being written: a copy of `m.db` (or a new one) next to it, swapped in by [`Staged::commit`]; dropped
-/// without `commit` (an error, a cancel) it is deleted and the stick keeps what it had.
+/// A library that is on the device, read without writing anything there: opened `immutable` (SQLite then creates no `-wal`,
+/// `-shm` or journal and changes no time stamp). A `-wal` left by a player holds changes `immutable` would ignore, so then the
+/// pair is copied to a scratch folder and opened there (the copy is removed when this is dropped).
+pub struct Old {
+    pub conn: Connection,
+    /// `Information.uuid`: the id of this library, the `databaseUuid` of its playlist entries.
+    pub uuid: String,
+    pub version: Version,
+    _scratch: Option<Scratch>,
+}
+
+struct Scratch(PathBuf);
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// `file:` URI of `p` that opens it `immutable`.
+fn immutable_uri(p: &Path) -> String {
+    let s = p
+        .to_string_lossy()
+        .replace('\\', "/")
+        .replace('%', "%25")
+        .replace('?', "%3f")
+        .replace('#', "%23");
+    let lead = if s.starts_with('/') { "" } else { "/" };
+    format!("file://{lead}{s}?immutable=1")
+}
+
+/// Opens `db` read-only and immutable: nothing is written next to it (see [`Old`]).
+pub fn open_immutable(db: &Path) -> rusqlite::Result<Connection> {
+    Connection::open_with_flags(
+        immutable_uri(db),
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_URI,
+    )
+}
+
+/// The `-wal` or `-shm` file of the database `db`.
+pub fn sidecar(db: &Path, suffix: &str) -> PathBuf {
+    let mut s = db.as_os_str().to_owned();
+    s.push(suffix);
+    PathBuf::from(s)
+}
+
+/// The library at `db`, `None` when there is no file; refused (the text for the user) when it is not an Engine library or its
+/// schema version is not in [`EXTENDED`].
+pub fn open_old(db: &Path) -> Result<Option<Old>, String> {
+    if !db.is_file() {
+        return Ok(None);
+    }
+    let err = |e: rusqlite::Error| format!("{}: {e}", db.display());
+    let wal = sidecar(db, "-wal");
+    let (conn, scratch) = if std::fs::metadata(&wal).is_ok_and(|m| m.len() > 0) {
+        let dir = std::env::temp_dir().join(format!(
+            "openfader-engine-{}-{:x}",
+            std::process::id(),
+            random()
+        ));
+        let scratch = Scratch(dir.clone());
+        let io = |e: std::io::Error| format!("{}: {e}", dir.display());
+        std::fs::create_dir_all(&dir).map_err(io)?;
+        std::fs::copy(db, dir.join("m.db")).map_err(io)?;
+        std::fs::copy(&wal, dir.join("m.db-wal")).map_err(io)?;
+        let conn = Connection::open_with_flags(dir.join("m.db"), OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(err)?;
+        (conn, Some(scratch))
+    } else {
+        (open_immutable(db).map_err(err)?, None)
+    };
+    let (uuid, major, minor, patch): (String, i64, i64, i64) = conn
+        .query_row(
+            "SELECT uuid, schemaVersionMajor, schemaVersionMinor, schemaVersionPatch FROM Information",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .map_err(|e| {
+            format!(
+                "The file {} is not an Engine library ({e}). Nothing was written. Check the stick in Engine DJ or choose another device.",
+                db.display()
+            )
+        })?;
+    let version = (major, minor, patch);
+    if !EXTENDED.contains(&version) {
+        return Err(format!(
+            "The Engine library {} has schema version {}, which this plugin does not know (it handles 2.18.0, 2.20.1 to 2.20.3, 2.21.0 to 2.21.2 and 3.0.0 to 3.0.2). It might not read what would be added, so nothing was written. Let Engine DJ rewrite the library or update this plugin.",
+            db.display(),
+            text(version)
+        ));
+    }
+    Ok(Some(Old {
+        conn,
+        uuid,
+        version,
+        _scratch: scratch,
+    }))
+}
+
+/// The library file being built: a copy of `m.db` (or a new one) at `Commit::staged_path(m.db)`, self-contained (journal mode
+/// DELETE, no `-wal`/`-shm`), handed to the commit by [`Staged::finish`] and the caller. Whoever drops it before the commit
+/// removes the file (`crate::Writer`).
 pub struct Staged {
     pub conn: Connection,
     /// `Information.uuid`: the id of this library, the `databaseUuid` of its playlist entries.
     pub uuid: String,
     /// The schema version of the file: the existing library's, else the one it was made with.
     pub version: Version,
-    target: PathBuf,
-    temp: Temp,
+    pub path: PathBuf,
 }
 
-/// The staged file, deleted when this is dropped (a renamed file is gone already).
-struct Temp(PathBuf);
-
-impl Drop for Temp {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
-}
-
-/// Opens the library at `db` for writing: a consistent copy of it when it exists (`VACUUM INTO` also folds in a journal a
-/// player left behind), refusing a file that is not an Engine library or whose schema version is not in [`EXTENDED`]; else a
-/// new library of the schema `new` (one of [`NEW`]).
-pub fn stage(db: &Path, new: Version) -> Result<Staged, String> {
+/// Builds the staged file for the library at `db`: a consistent copy of `old` (`VACUUM INTO` folds in a journal a player left
+/// behind), else a new library of the schema `new` (one of [`NEW`]). The folder of `db` must exist.
+pub fn stage(db: &Path, new: Version, old: Option<Old>) -> Result<Staged, String> {
     let err = |e: rusqlite::Error| format!("{}: {e}", db.display());
-    let temp = Temp(db.with_extension("db.new"));
-    let _ = std::fs::remove_file(&temp.0);
-    if let Some(dir) = db.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    let (uuid, version) = if db.is_file() {
-        let old = Connection::open_with_flags(db, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(err)?;
-        let (uuid, major, minor, patch): (String, i64, i64, i64) = old
-            .query_row(
-                "SELECT uuid, schemaVersionMajor, schemaVersionMinor, schemaVersionPatch FROM Information",
-                [],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-            )
-            .map_err(|e| format!("{} is not an Engine library: {e}", db.display()))?;
-        let version = (major, minor, patch);
-        if !EXTENDED.contains(&version) {
-            return Err(format!(
-                "{} has schema version {}, which this plugin does not know: it extends 2.18.0, 2.20.1 to 2.20.3, 2.21.0 to 2.21.2 and 3.0.0 to 3.0.2 (Engine DJ 2.0 to 5.0), so it was left untouched",
-                db.display(),
-                text(version)
-            ));
-        }
-        old.execute("VACUUM INTO ?1", [temp.0.to_string_lossy()])
+    let path = Commit::staged_path(db);
+    let _ = std::fs::remove_file(&path);
+    let (uuid, version) = if let Some(old) = old {
+        old.conn
+            .execute("VACUUM INTO ?1", [path.to_string_lossy()])
             .map_err(err)?;
-        (uuid, version)
+        (old.uuid, old.version)
     } else {
         debug_assert!(NEW.contains(&new));
         let uuid = uuid();
-        let conn = Connection::open(&temp.0).map_err(err)?;
+        let conn = Connection::open(&path).map_err(err)?;
         conn.execute_batch(if new == OLDEST { schema_2::DDL } else { DDL })
             .map_err(err)?;
         conn.execute(
@@ -275,36 +347,35 @@ pub fn stage(db: &Path, new: Version) -> Result<Staged, String> {
         .map_err(err)?;
         (uuid, new)
     };
-    let conn = Connection::open(&temp.0).map_err(err)?;
+    let conn = Connection::open(&path).map_err(err)?;
+    // A copy of a WAL-mode file would keep that mode (and write `-wal` files): the staged file must stand alone.
+    let mode: String = conn
+        .query_row("PRAGMA journal_mode = DELETE", [], |r| r.get(0))
+        .map_err(err)?;
+    if !mode.eq_ignore_ascii_case("delete") {
+        return Err(format!("{}: journal mode {mode}", path.display()));
+    }
     Ok(Staged {
         conn,
         uuid,
         version,
-        target: db.to_path_buf(),
-        temp,
+        path,
     })
 }
 
 impl Staged {
-    /// Checks the file and renames it over the library; a `-wal`/`-shm` pair of the old file (already folded in) is removed.
-    pub fn commit(self) -> Result<(), String> {
+    /// Runs `PRAGMA integrity_check` and closes the file; returns its path.
+    pub fn finish(self) -> Result<PathBuf, String> {
         let ok: String = self
             .conn
             .query_row("PRAGMA integrity_check", [], |r| r.get(0))
             .map_err(|e| e.to_string())?;
         if ok != "ok" {
-            return Err(format!("the library failed its integrity check: {ok}"));
+            return Err(format!(
+                "The new library failed its integrity check ({ok}). Nothing was changed on the stick and the old library is intact. Try the export again; if it repeats, the stick may be failing."
+            ));
         }
-        let Staged {
-            conn, target, temp, ..
-        } = self;
-        conn.close().map_err(|(_, e)| e.to_string())?;
-        std::fs::rename(&temp.0, &target).map_err(|e| format!("{}: {e}", target.display()))?;
-        for suffix in ["-wal", "-shm"] {
-            let mut side = target.clone().into_os_string();
-            side.push(suffix);
-            let _ = std::fs::remove_file(side);
-        }
-        Ok(())
+        self.conn.close().map_err(|(_, e)| e.to_string())?;
+        Ok(self.path)
     }
 }

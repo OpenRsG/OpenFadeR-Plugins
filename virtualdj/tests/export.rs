@@ -377,7 +377,7 @@ fn failures_leave_the_stick_as_it_was() {
         &json!({}),
     )
     .unwrap_err();
-    assert!(err.contains("not enough space"), "{err}");
+    assert!(err.contains("Not enough space"), "{err}");
     assert_eq!(std::fs::read_dir(&stick.0).unwrap().count(), 0);
     // A database that is not XML is never overwritten.
     std::fs::create_dir_all(stick.join("VirtualDJ")).unwrap();

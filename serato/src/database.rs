@@ -85,6 +85,15 @@ pub fn paths(buf: &[u8]) -> Result<Vec<String>, String> {
         .collect())
 }
 
+/// [`paths`] of a `database V2` that starts with its `vrsn` record; `Err` for anything else (Serato and the reader take it for
+/// no library at all).
+pub fn open(buf: &[u8]) -> Result<Vec<String>, String> {
+    if !buf.starts_with(b"vrsn") {
+        return Err("does not start with a vrsn record".into());
+    }
+    paths(buf)
+}
+
 /// A path as `pfil` and `ptrk` hold it, normalised: forward slashes (inferred: a Windows library may hold backslashes) and no
 /// leading slash (a macOS path is absolute without it; the reader finds the drive root it starts at).
 pub fn norm(p: &str) -> String {

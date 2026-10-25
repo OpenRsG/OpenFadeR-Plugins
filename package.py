@@ -21,4 +21,7 @@ for manifest in sorted(root.glob("*/plugin.json")):
     out = dist / f"{m['name']}-{OS}-{ARCH}.zip"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.write(built, lib)
+        # What the stick checker reads next to plugin.json (a device plugin's table of players).
+        if (manifest.parent / "players.json").is_file():
+            z.write(manifest.parent / "players.json", "players.json")
     print(out.name)

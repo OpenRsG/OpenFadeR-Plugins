@@ -7,7 +7,7 @@
 
 pub mod db;
 pub mod read;
-mod rows;
+pub(crate) mod rows;
 
 use rekordbox_common::pdb::HEAP;
 

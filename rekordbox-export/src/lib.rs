@@ -25,12 +25,16 @@
 //! store's colours, MyTag and user playlists already in it.
 //!
 //! `export` reads an existing library into [`pdb::db::Db`], adds / updates the snapshot's tracks and playlists and writes the
-//! whole library again (tmp file + rename). The library files are written last, so a cancelled or failed export leaves the device
-//! as it was (the audio and analysis files it had already copied for new tracks are removed again).
+//! whole library again, all or nothing: audio and analysis files first (new names, fsynced), then the library files staged in
+//! one [`Commit`] (journal `/.openfader/journal.json`), read back and compared with what was meant (`verify`), then switched
+//! together. A cancel, an error or a failed read-back leaves the device as it was (the files already copied for new tracks are
+//! removed again); a pull-out during the switch is finished or rolled back by the next write or `device_check`. With
+//! `ExportOptions::dry_run` nothing is written and the report carries the `ExportPlan`. `check` is `device_check` / `device_fix`.
 
 pub mod anlz;
 pub mod bank;
 mod carry;
+pub mod check;
 pub mod convert;
 mod merge;
 pub mod onelibrary;
@@ -41,12 +45,14 @@ pub mod remove;
 mod run;
 pub mod settings;
 pub mod update;
+mod verify;
 
 pub use settings::{read as settings_read, schema as settings_schema, write as settings_write};
 
 use openfader_plugin::library::{
-    ActionAnswer, BackupTrack, DeviceAction, DeviceInfo, ExportOptions, ExportReport, Feature,
-    Field, FieldKind, RemoveReport, RemoveTarget, Scope, Snapshot, UpdateReport,
+    commit::{self, Commit},
+    ActionAnswer, BackupTrack, CheckReport, DeviceAction, DeviceInfo, ExportOptions, ExportReport,
+    Feature, Field, FieldKind, RemoveReport, RemoveTarget, Scope, Snapshot, UpdateReport,
 };
 use pdb::db::{Db, Tags};
 use progress::Progress;
@@ -123,19 +129,17 @@ fn column_label(label: &str) -> String {
     format!("\u{fffa}{label}\u{fffb}")
 }
 
+/// Writes `bytes` to a file that is new (or may be overwritten whole, like a new track's analysis file) and flushes it to the
+/// device. A library file that exists goes through a [`Commit`] instead.
 fn put(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(dir) = path.parent() {
         at(std::fs::create_dir_all(dir), dir)?;
     }
-    at(std::fs::write(path, bytes), path)
+    commit::write_synced(path, bytes)
 }
 
-/// Writes `bytes` next to `path` and renames them over it, so `path` is whole or untouched.
-fn put_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let tmp = path.with_extension("tmp");
-    put(&tmp, bytes)?;
-    at(std::fs::rename(&tmp, path), path)
-}
+/// The owner named in the device's journal while a [`Commit`] of this plugin is under way.
+const OWNER: &str = "rekordbox-device";
 
 /// A file or folder name: characters FAT and rekordbox reject become `_`; empty → `fallback` (the SDK's rule, shared by every
 /// device format so they find each other's audio copies).
@@ -146,9 +150,26 @@ fn today() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
 
-/// Builds a new `exportLibrary.db` next to `one` from `db` and `tags`, lets `then` add to it, and renames it over `one`; the
-/// temporary file is removed when any step fails. The library id is kept from an existing `one`.
-fn rebuild_onelibrary(
+/// Copies the database file `from` to the new `to`, with the write-ahead log `from` may have (a OneLibrary last written by
+/// rekordbox), so the copy holds everything `from` does.
+fn copy_db(from: &Path, to: &Path) -> Result<(), String> {
+    let wal = |p: &Path| {
+        let mut n = p.as_os_str().to_owned();
+        n.push("-wal");
+        std::path::PathBuf::from(n)
+    };
+    at(std::fs::copy(from, to), to)?;
+    let _ = std::fs::remove_file(wal(to));
+    if wal(from).is_file() {
+        at(std::fs::copy(wal(from), wal(to)), to)?;
+    }
+    Ok(())
+}
+
+/// Builds a new `exportLibrary.db` from `db` and `tags` at the staged path of `one`, lets `then` add to it and stages it in `c`;
+/// the staged file is removed when any step fails. The library id is kept from an existing `one`.
+fn stage_onelibrary(
+    c: &mut Commit,
     one: &Path,
     key: &str,
     db: &Db,
@@ -160,21 +181,28 @@ fn rebuild_onelibrary(
         .then(|| carry::library_id(one, key))
         .flatten()
         .unwrap_or(chrono::Local::now().timestamp() as u32); // any number; rekordbox's is random per library
-    let tmp = one.with_extension("new");
+    let tmp = Commit::staged_path(one);
     let _ = std::fs::remove_file(&tmp);
     onelibrary::write(&tmp, key, db, tags, id)
         .and_then(|()| then(&tmp))
-        .and_then(|()| at(std::fs::rename(&tmp, one), one))
+        .and_then(|()| c.stage_built(one))
         .inspect_err(|_| drop(std::fs::remove_file(&tmp)))
 }
 
-/// Writes the library files of `dest` from `db` and `tags`: `exportLibrary.db` (encrypted with `key`; an existing one hands its
-/// histories and cue rows over, see `carry`) when one is there or `new_one`, `exportExt.pdb` (when there is MyTag or one
-/// existed) and, last, `export.pdb`.
-fn commit(dest: &Path, db: &Db, tags: &Tags, key: &str, new_one: bool) -> Result<(), String> {
-    let (one, ext) = (dest.join(ONE), dest.join(EXT));
+/// Stages the library files of `dest` from `db` and `tags` in `c`: `exportLibrary.db` (encrypted with `key`; an existing one
+/// hands its histories and cue rows over, see `carry`) when one is there or `new_one`, `exportExt.pdb` (when there is MyTag or
+/// one existed) and, last, `export.pdb`. Nothing is on the device under its real name until `c` commits.
+fn stage_libraries(
+    c: &mut Commit,
+    dest: &Path,
+    db: &Db,
+    tags: &Tags,
+    key: &str,
+    new_one: bool,
+) -> Result<(), String> {
+    let one = dest.join(ONE);
     if new_one || one.is_file() {
-        rebuild_onelibrary(&one, key, db, tags, |tmp| {
+        stage_onelibrary(c, &one, key, db, tags, |tmp| {
             let carried = if one.is_file() {
                 carry::carry(&one, tmp, key)
             } else {
@@ -183,10 +211,34 @@ fn commit(dest: &Path, db: &Db, tags: &Tags, key: &str, new_one: bool) -> Result
             carried.and_then(|()| bank::apply(tmp, key, &db.banks))
         })?;
     }
+    stage_pdb(c, dest, db, tags)
+}
+
+/// Stages `exportExt.pdb` (when there is MyTag or one existed) and `export.pdb`, the Device Library.
+fn stage_pdb(c: &mut Commit, dest: &Path, db: &Db, tags: &Tags) -> Result<(), String> {
+    let ext = dest.join(EXT);
     if !tags.categories.is_empty() || ext.is_file() {
-        put_atomic(&ext, &tags.encode()?)?;
+        c.stage(&ext, &tags.encode()?)?;
     }
-    put_atomic(&dest.join(PDB), &db.encode()?)
+    c.stage(&dest.join(PDB), &db.encode()?)
+}
+
+/// One change of the library files, all or nothing: stages them in `c` (which may hold other files already), reads them back
+/// ([`verify`]) and switches them together.
+fn write_libraries(
+    mut c: Commit,
+    dest: &Path,
+    db: &Db,
+    tags: &Tags,
+    key: &str,
+    new_one: bool,
+) -> Result<(), String> {
+    let mut progress = Progress::new();
+    progress.phase("Writing the library", 1)?;
+    stage_libraries(&mut c, dest, db, tags, key, new_one)?;
+    progress.phase("Checking the library", 1)?;
+    verify::staged(&c, db, tags, key)?;
+    c.commit()
 }
 
 /// The OneLibrary key: the plugin's setting, else the built-in one, so both libraries are always written.
@@ -231,6 +283,8 @@ pub fn device_probe(root: &Path, _settings: &Value) -> Result<DeviceInfo, String
             Feature::Histories,
             Feature::Backup,
             Feature::Settings,
+            Feature::Plan,
+            Feature::Check,
         ],
         actions: vec![DeviceAction {
             id: convert::ID.into(),
@@ -258,6 +312,9 @@ pub fn export(
 ) -> Result<ExportReport, String> {
     let key = key(settings);
     let config = DeviceConfig::from_values(&options.config);
+    if options.dry_run {
+        return run::dry_run(root, snapshot, options, &config);
+    }
     let mut progress = Progress::new();
     let (mut report, ids) = run::run(root, snapshot, options, &config, &key, &mut progress)?;
     match update::baselines(root, &ids, snapshot, &mut progress) {
@@ -269,6 +326,30 @@ pub fn export(
         .map(|r| r.fingerprint)
         .filter(|f| !f.is_empty());
     Ok(report)
+}
+
+/// The state of the libraries on the device and what is wrong with them (read-only), see [`check`].
+pub fn device_check(
+    root: &Path,
+    config: &BTreeMap<String, String>,
+    settings: &Value,
+) -> Result<CheckReport, String> {
+    check::run(root, config, &key(settings))
+}
+
+/// Runs the fix `fix` of a problem [`device_check`] reported, see [`check`].
+pub fn device_fix(
+    root: &Path,
+    fix: &str,
+    config: &BTreeMap<String, String>,
+    settings: &Value,
+) -> Result<ActionAnswer, String> {
+    check::fix(
+        root,
+        fix,
+        &DeviceConfig::from_values(config),
+        &key(settings),
+    )
 }
 
 /// What changed on the player since `baselines`.

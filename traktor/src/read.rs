@@ -58,7 +58,7 @@ pub fn probe(path: &Path) -> Option<Probe> {
 }
 
 /// Folders of a `/:`-separated `DIR`.
-fn parts(dir: &str) -> Vec<&str> {
+pub(crate) fn parts(dir: &str) -> Vec<&str> {
     dir.split("/:").filter(|p| !p.is_empty()).collect()
 }
 
@@ -77,7 +77,7 @@ fn resolve(device: Option<&Path>, vol: &str, dir: &str, file: &str) -> PathBuf {
     cands.into_iter().find(|p| p.exists()).unwrap_or(first)
 }
 
-fn key_of(e: &El) -> Option<String> {
+pub(crate) fn key_of(e: &El) -> Option<String> {
     let l = e.child("LOCATION")?;
     Some(format!(
         "{}{}{}",
@@ -263,22 +263,26 @@ fn walk(nodes: &El, path: &mut Vec<String>, out: &mut Vec<(Playlist, Vec<String>
     }
 }
 
+/// Folders and playlists of an NML under its `$ROOT` folder, depth first, each with its member keys.
+pub(crate) fn lists(nml: &El) -> Vec<(Playlist, Vec<String>)> {
+    let mut out = Vec::new();
+    let root = nml
+        .child("PLAYLISTS")
+        .and_then(|p| {
+            p.kids
+                .iter()
+                .find(|n| n.get("TYPE") == Some("FOLDER") && n.get("NAME") == Some("$ROOT"))
+        })
+        .and_then(|r| r.child("SUBNODES"));
+    if let Some(r) = root {
+        walk(r, &mut Vec::new(), &mut out);
+    }
+    out
+}
+
 impl Nml {
     fn lists(&self) -> Vec<(Playlist, Vec<String>)> {
-        let mut out = Vec::new();
-        let root = self
-            .nml
-            .child("PLAYLISTS")
-            .and_then(|p| {
-                p.kids
-                    .iter()
-                    .find(|n| n.get("TYPE") == Some("FOLDER") && n.get("NAME") == Some("$ROOT"))
-            })
-            .and_then(|r| r.child("SUBNODES"));
-        if let Some(r) = root {
-            walk(r, &mut Vec::new(), &mut out);
-        }
-        out
+        lists(&self.nml)
     }
 }
 

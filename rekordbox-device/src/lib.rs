@@ -5,9 +5,9 @@
 mod read;
 
 use openfader_plugin::library::{
-    ActionAnswer, Analysis, BackupTrack, DeviceInfo, ExportOptions, ExportReport, LibraryPlugin,
-    Probe, RemoveReport, RemoveTarget, SettingsRead, SettingsSchema, SettingsWritten, Snapshot,
-    Source, UpdateReport,
+    ActionAnswer, Analysis, BackupTrack, CheckReport, DeviceInfo, ExportOptions, ExportReport,
+    LibraryPlugin, Probe, RemoveReport, RemoveTarget, SettingsRead, SettingsSchema,
+    SettingsWritten, Snapshot, Source, UpdateReport,
 };
 use rekordbox_export as ops;
 use serde_json::Value;
@@ -19,6 +19,23 @@ pub struct Device;
 impl LibraryPlugin for Device {
     fn probe(path: &Path) -> Option<Probe> {
         read::probe(path)
+    }
+
+    fn device_check(
+        root: &Path,
+        config: &BTreeMap<String, String>,
+        settings: &Value,
+    ) -> Result<CheckReport, String> {
+        ops::device_check(root, config, settings)
+    }
+
+    fn device_fix(
+        root: &Path,
+        fix: &str,
+        config: &BTreeMap<String, String>,
+        settings: &Value,
+    ) -> Result<ActionAnswer, String> {
+        ops::device_fix(root, fix, config, settings)
     }
 
     fn open(path: &Path, settings: &Value) -> Result<Box<dyn Source>, String> {

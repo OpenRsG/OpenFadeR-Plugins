@@ -1,10 +1,11 @@
 //! Writing one planned track: the audio copy, its ANLZ files, its cover and its library row.
 
-use super::Job;
 use super::plan::Plan;
+use super::{CueCheck, Job, Writer};
+use crate::anlz;
+use crate::onelibrary::image_variant;
 use crate::pdb::db::Item;
-use crate::{anlz, onelibrary::image_variant, put};
-use openfader_plugin::library::{Analysis, DETAIL_ENTRIES_PER_SEC, Track, host};
+use openfader_plugin::library::{host, Analysis, Track, DETAIL_ENTRIES_PER_SEC};
 use rekordbox_common::at;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -26,10 +27,9 @@ impl Covers {
 
     /// The device path of `src`: the one it got already, else the path the device track `old` has, else the next free one. The
     /// image is written on first sight, as is for both sizes (there is no image resizer in the build); `b` is OneLibrary's copy.
-    fn place(
+    pub(super) fn place(
         &mut self,
-        dest: &Path,
-        created: &mut Vec<PathBuf>,
+        w: &mut Writer,
         src: &Path,
         old: Option<&str>,
     ) -> Result<String, String> {
@@ -45,12 +45,8 @@ impl Covers {
         if self.placed.insert(src.to_owned(), rel.clone()).is_none() {
             let bytes = at(std::fs::read(src), src)?;
             for rel in [rel.clone(), image_variant(&rel)] {
-                let path = dest.join(&rel);
-                if !path.exists() {
-                    created.push(path.clone());
-                }
-                put(&path, &bytes)?;
-                put(&dest.join(rel.replace(".jpg", "_m.jpg")), &bytes)?;
+                w.place(&w.dest.join(rel.replace(".jpg", "_m.jpg")), &bytes)?;
+                w.place(&w.dest.join(&rel), &bytes)?;
             }
         }
         Ok(rel)
@@ -73,14 +69,11 @@ fn file_type(file: &Path) -> u16 {
     }
 }
 
-/// The analysis the ANLZ files are written from: what the snapshot carries (cues, grid, key, phrases; waveforms stay behind),
-/// else the track's own library analysis, and for a missing grid, waveform or key the host's analysis of the audio.
-fn complete(track: &Track, given: Option<&Analysis>, warnings: &mut Vec<String>) -> Analysis {
+/// The analysis the ANLZ files are written from before the host analyses the audio: what the snapshot carries (cues, grid, key,
+/// phrases; waveforms stay behind), else the track's own library analysis, and its waveform when the snapshot's has none.
+fn known(track: &Track, given: Option<&Analysis>) -> Analysis {
     let own = || host::analysis(track, false);
     let mut a = given.cloned().or_else(own).unwrap_or_default();
-    let has_wave = |a: &Analysis| {
-        !(a.three_band_detail.is_empty() && a.detail.is_empty() && a.color_detail.is_empty())
-    };
     if given.is_some() && !has_wave(&a) {
         if let Some(w) = own() {
             (a.preview, a.detail, a.color_preview) = (w.preview, w.detail, w.color_preview);
@@ -88,32 +81,56 @@ fn complete(track: &Track, given: Option<&Analysis>, warnings: &mut Vec<String>)
                 (w.color_detail, w.three_band_preview, w.three_band_detail);
         }
     }
-    let has_wave = has_wave(&a);
-    if let Some(file) = track
-        .file
-        .as_deref()
-        .filter(|_| a.beats.is_empty() || !has_wave || a.key.is_none() && track.key.is_empty())
-    {
+    a
+}
+
+fn has_wave(a: &Analysis) -> bool {
+    !(a.three_band_detail.is_empty() && a.detail.is_empty() && a.color_detail.is_empty())
+}
+
+/// Whether the host's analysis of the audio must fill a missing grid, waveform or key of `a`.
+fn needs_audio(track: &Track, a: &Analysis) -> bool {
+    track.file.is_some()
+        && (a.beats.is_empty() || !has_wave(a) || a.key.is_none() && track.key.is_empty())
+}
+
+/// Whether the host has to analyse the audio of `track` for its analysis files (a dry run counts these).
+pub(super) fn analyse_needed(track: &Track, given: Option<&Analysis>) -> bool {
+    needs_audio(track, &known(track, given))
+}
+
+/// [`known`], and for a missing grid, waveform or key the host's analysis of the audio.
+pub(crate) fn complete(
+    track: &Track,
+    given: Option<&Analysis>,
+    warnings: &mut Vec<String>,
+) -> Analysis {
+    let mut a = known(track, given);
+    let had_wave = has_wave(&a);
+    if needs_audio(track, &a) {
         match host::analysis(track, true) {
             Some(fresh) => {
                 if a.beats.is_empty() {
                     a.beats = fresh.beats;
                 }
-                if !has_wave {
+                if !had_wave {
                     (a.three_band_detail, a.three_band_preview) =
                         (fresh.three_band_detail, fresh.three_band_preview);
                 }
                 a.key = a.key.or(fresh.key);
             }
-            None => warnings.push(format!("{}: analysis failed", file.display())),
+            None => warnings.push(format!(
+                "{}: analysis failed",
+                track.file.as_deref().unwrap_or(Path::new("")).display()
+            )),
         }
     }
     a
 }
 
 impl Job<'_> {
-    /// Copies the audio of a new track, writes its ANLZ files and cover, and returns its library row (device id `id`). What it
-    /// creates is recorded in `created`; an existing track keeps its files' places.
+    /// Writes the ANLZ files and cover of a track whose audio is already placed and returns its library row (device id `id`).
+    /// The `Writer` records what it creates (so a failure removes it again) and stages a changed existing file in the commit.
     pub(super) fn write_track(
         &mut self,
         plan: &Plan,
@@ -127,13 +144,6 @@ impl Job<'_> {
         let a = complete(t, given.as_ref(), &mut self.report.warnings);
         let target = dest.join(&plan.rel);
         let old = plan.at.map(|at| &self.db.tracks[at]);
-        if old.is_none() {
-            if let Some(dir) = target.parent() {
-                at(std::fs::create_dir_all(dir), dir)?;
-            }
-            self.created.push(target.clone());
-            at(std::fs::copy(file, &target), &target)?;
-        }
         let anlz_dir = match old
             .map(|t| t.analyze_path.trim_start_matches('/'))
             .and_then(|p| p.rsplit_once('/'))
@@ -141,17 +151,24 @@ impl Job<'_> {
             Some((dir, _)) => dir.to_owned(),
             None => format!("PIONEER/USBANLZ/P{:03X}/{id:08X}", id % 0x1000),
         };
-        if old.is_none() {
-            self.created.push(dest.join(&anlz_dir));
-        }
         let files = anlz::encode(&a, &format!("/{}", plan.rel));
+        let mut back = Vec::new();
         for (ext, bytes) in [
             ("DAT", &files.dat),
             ("EXT", &files.ext),
             ("2EX", &files.ex2),
         ] {
-            put(&dest.join(format!("{anlz_dir}/ANLZ0000.{ext}")), bytes)?;
+            back.push(
+                self.w
+                    .place(&dest.join(format!("{anlz_dir}/ANLZ0000.{ext}")), bytes)?,
+            );
         }
+        self.cue_checks.push(CueCheck {
+            title: t.title.clone(),
+            dat: back[0].clone(),
+            ext: back[1].clone(),
+            want: rekordbox_common::anlz::count_cues(&files.dat, Some(&files.ext))?,
+        });
         let jpeg = t.artwork.as_deref().filter(|p| {
             p.extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("jpg") || e.eq_ignore_ascii_case("jpeg"))
@@ -159,10 +176,7 @@ impl Job<'_> {
         let artwork = match jpeg {
             Some(p) => {
                 let old_rel = old.and_then(|t| t.artwork.as_deref());
-                Some(format!(
-                    "/{}",
-                    covers.place(dest, &mut self.created, p, old_rel)?
-                ))
+                Some(format!("/{}", covers.place(&mut self.w, p, old_rel)?))
             }
             None => old.and_then(|t| t.artwork.clone()),
         };

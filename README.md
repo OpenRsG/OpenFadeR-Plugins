@@ -34,9 +34,32 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 | `yt-dlp` | track sources: YouTube / SoundCloud search, playlists and downloads (Python, needs `yt-dlp`; on Windows `winget install -e --id yt-dlp.yt-dlp`, which brings ffmpeg too) |
 | `cover-art` | artwork: cover candidates from MusicBrainz + Cover Art Archive, iTunes Search and (with a token) Discogs (Python) |
 
+### A stick you can trust (Engine DJ, Serato, Traktor, VirtualDJ)
+
+`engine-dj`, `serato`, `traktor` and `virtualdj` give the same guarantees as the rekordbox plugin when they write a stick:
+
+- **All or nothing.** One export is one `Commit` of the SDK: the library files (Engine DJ `m.db`; Serato `database V2` and every crate; Traktor `collection.nml`; VirtualDJ `database.xml` and its list files) are staged beside their targets as `*.ofnew`, flushed, read back, then switched in one journalled step (`/.openfader/journal.json`). Pulled out at any point, the stick holds the old library or the new one, never a mix; the next write finishes or rolls back an interrupted switch first. A cancel or an error removes every file and folder the run made and leaves the stick byte-identical (Serato's tag edits of audio that was already there are put back).
+- **Read back before it counts.** The staged library is read again with the plugin's own reader (tracks, playlists and their entries, cues and loops where the format holds them). A difference stops the export with a plain sentence, the old library stays, and a clean export reports `verified`.
+- **Dry run.** An export with `dry_run` writes nothing (not a folder, not a temp file) and returns the plan from the code the real export uses: tracks to add or update, bytes to copy and write, files, and what is blocked (no room, a file over the file system's limit, a name the stick cannot hold, a library that cannot be read).
+- **Check and fix.** `device_check` reads a stick without writing and lists problems with cause, consequence and action: library unreadable, audio listed but missing (the host copies it again from the collection), leftovers of an interrupted write, and per format (Engine DJ: `PRAGMA quick_check`, stale `-wal`/`-shm` files). `device_fix` cleans leftovers through the same journal. None of these formats keeps a backup copy on a stick, so an unreadable library has no plugin fix.
+- **Players.** Serato, Traktor and VirtualDJ are read by software on a computer, not by players, so they ship no `players.json`. `engine-dj/players.json` lists the Denon DJ models the repository documents as reading an Engine library, all `to_measure`: file systems and firmware are not measured yet.
+
 ### One stick for every player and app
 
 The five device plugins write side by side on the same stick and share one copy of each audio file (`Contents/<artist>/<album>/<file>`). In the app's device window (also opened by the USB icon of a connected stick in the browser), the DEVICES tab asks what the stick is for: UNIVERSAL writes every format, DEDICATED only the ticked ones. Each format says which software and players read it and shows its options (rekordbox: OneLibrary on or off). By default the formats are those already on the stick, or all of them on an empty stick. A stick written by rekordbox is extended, not duplicated, because its audio files are found by name and size. None of the four new formats has been tried on real hardware or in the vendor apps yet: please report what does not load.
+
+### A stick you can trust (rekordbox)
+
+What `rekordbox-device` guarantees when it writes a stick, and how that is checked:
+
+- **All or nothing.** One user action (export, sync, remove, player settings) is one transaction. New audio and analysis files are written and fsynced first, the changed library files are staged beside their targets, then switched in one journalled step. Pulled out at any point, the stick holds the old libraries or the new ones, never a mix; the next write or `device_check` finishes or rolls back an interrupted switch first. A cancel or an error leaves the folder as it was.
+- **Read back before it counts.** Before the switch the staged Device Library and OneLibrary are read again and compared with what was meant to be written (titles, counts, playlists and their entries, cue counts in the analysis files). A difference stops the export with a plain sentence and nothing changed; a clean export reports `verified`.
+- **Dry run.** An export with `dry_run` writes nothing and returns the plan: tracks to add or update, bytes to copy and write, files, and what is blocked (no room, a file over the file system's limit, a name the stick cannot hold, too many playlists).
+- **Names the file system accepts.** Long, accented, emoji and reserved (`CON`, `NUL`, ...) names are cleaned; a device path never exceeds the 255 characters a Device Library row holds.
+- **Check and fix.** `device_check` reads what is on a stick without writing and lists problems (missing or unreadable library, the two libraries disagreeing, missing audio or analysis files, leftovers of an interrupted write) with cause, consequence and action. `device_fix` repairs one of them: rebuild one library from the other, rewrite the analysis files, clean leftovers.
+- **Players.** `rekordbox-device/players.json` lists the players the checker knows, what each reads and what is only inferred. [COMPATIBILITY.md](COMPATIBILITY.md) says which rows are confirmed on hardware (none yet) and which are not.
+
+Readers that are not ours check the output in CI (job `readers`): `rekordbox-export/examples/fixture.rs` writes a small stick (unicode, emoji and long names, cues, loops, a playlist folder), and `.github/check_stick.py` reads it with pyrekordbox (the analysis files and `exportLibrary.db`), with a small DeviceSQL reader and with `rekordcrate` (`export.pdb`), and fails on any difference from the manifest. Locally: `cargo run --release -p rekordbox-export --example fixture -- /tmp/fx && pip install pyrekordbox==0.5.0 && python .github/check_stick.py /tmp/fx`. rekordcrate 0.3.0 cannot parse cue entries of type 1, so it is used for `export.pdb` only.
 
 ## Build from source
 

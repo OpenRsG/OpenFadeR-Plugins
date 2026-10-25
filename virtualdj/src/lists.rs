@@ -22,15 +22,16 @@ pub fn dir(root: &Path) -> PathBuf {
     }
 }
 
-/// The folders and files of `snapshot` below `base`. `tracks[i]`: `FilePath` and size of track `i`, `None` for a track that
-/// is not on the stick. A warning for two lists of one folder that would share a file.
+/// The folders and files of `snapshot` below `base`, and how many songs each file holds. `tracks[i]`: `FilePath` and size of
+/// track `i`, `None` for a track that is not on the stick. A warning for two lists of one folder that would share a file.
 pub fn build(
     snapshot: &Snapshot,
     base: &Path,
     tracks: &[Option<(String, u64)>],
     warnings: &mut Vec<String>,
-) -> (Vec<PathBuf>, Vec<(PathBuf, String)>) {
+) -> (Vec<PathBuf>, Vec<(PathBuf, String)>, Vec<usize>) {
     let (mut dirs, mut files) = (Vec::new(), Vec::<(PathBuf, String)>::new());
+    let mut counts = Vec::<usize>::new();
     if !snapshot.playlists.is_empty() {
         dirs.push(base.to_owned());
     }
@@ -65,14 +66,16 @@ pub fn build(
         list.write(0, &mut text);
         text.push('\n');
         let file = dir.join(format!("{name}.vdjfolder"));
-        if files.iter().any(|(f, _)| *f == file) {
+        if let Some(at) = files.iter().position(|(f, _)| *f == file) {
             warnings.push(format!(
                 "{}: another list of the same folder has this file name, it replaces that one",
                 pl.name
             ));
-            files.retain(|(f, _)| *f != file);
+            files.remove(at);
+            counts.remove(at);
         }
+        counts.push(list.kids.len());
         files.push((file, text));
     }
-    (dirs, files)
+    (dirs, files, counts)
 }

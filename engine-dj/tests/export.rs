@@ -667,7 +667,14 @@ fn a_track_without_sample_rate_gets_a_row_and_a_warning() {
     let d = Dirs::new("rate");
     let mut snap = setup(&d);
     snap.tracks[0].0.sample_rate = 0;
-    let report = export(&d, &snap).unwrap();
+    // No host table: the sample rate of the audio is unknown.
+    let report = engine_dj::Plugin::export(
+        &d.stick(),
+        &snap,
+        &openfader_plugin::library::ExportOptions::default(),
+        &serde_json::Value::Null,
+    )
+    .unwrap();
     assert!(
         report
             .warnings
@@ -935,7 +942,7 @@ fn the_schema_option_only_decides_a_new_library() {
     let snap = setup(&d);
     let err = export_schema(&d, &snap, "2.20.3").unwrap_err();
     assert!(
-        err.contains(engine_dj::SCHEMA_OPTION) && err.contains("2.20.3"),
+        err.contains("Choose 3.0.0 or 2.18.0") && err.contains("2.20.3"),
         "{err}"
     );
     assert!(
@@ -973,7 +980,7 @@ fn old_two_file_library_and_full_stick_are_refused_before_any_write() {
         },
         &Value::Null,
     );
-    assert!(full.unwrap_err().contains("not enough space"));
+    assert!(full.unwrap_err().contains("Not enough space"));
     assert!(
         !d.stick().join("Contents").exists() && !d.stick().join("Engine Library").exists(),
         "nothing copied or created"

@@ -627,7 +627,7 @@ fn unreadable_tracks_are_skipped_and_too_little_space_fails_up_front() {
     let rep = export(&usb, &snap);
     assert_eq!(rep.tracks, 1);
     assert!(
-        rep.warnings.iter().any(|w| w.contains("missing.mp3")),
+        rep.warnings.iter().any(|w| w.starts_with("Gone:")),
         "{:?}",
         rep.warnings
     );
@@ -646,7 +646,7 @@ fn unreadable_tracks_are_skipped_and_too_little_space_fails_up_front() {
         &serde_json::Value::Null,
     )
     .unwrap_err();
-    assert!(err.contains("not enough space"), "{err}");
+    assert!(err.contains("Not enough space"), "{err}");
     assert!(
         !usb2.join("_Serato_").exists() && !usb2.join("Contents").exists(),
         "nothing written"

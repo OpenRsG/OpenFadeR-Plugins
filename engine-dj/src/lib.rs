@@ -12,9 +12,43 @@
 //! | `m.db`, `Playlist`, `PlaylistEntity` | the folder and list tree ([`playlists`]) |
 //!
 //! A track is identified by its `path`: a library track found there is refreshed (metadata, cues, loops, grid, waveform) and
-//! never deleted, any other is added. A list that exists by name path gets the snapshot's tracks, other lists stay. The new
-//! database is built beside `m.db` and renamed over it once it passes `PRAGMA integrity_check`, so a failed or cancelled export
-//! leaves the stick as it was.
+//! never deleted, any other is added. A list that exists by name path gets the snapshot's tracks, other lists stay.
+//!
+//! # What an export guarantees
+//!
+//! * **All or nothing.** The new `m.db` is built at `m.db.ofnew` beside the old one (`Commit::staged_path`; a copy made with
+//!   `VACUUM INTO` or a new file, journal mode DELETE, so it needs no `-wal`/`-shm`) and switched in by one `Commit` of the SDK,
+//!   journal `.openfader/journal.json`. A pulled stick leaves the whole old library or, once the host has recovered the
+//!   journal, the whole new one. The old file's `-wal`/`-shm` are removed after the switch; a crash between the two leaves them
+//!   and `device_check` reports them (they are older than `m.db`).
+//! * **Cancel and errors** (`Err("cancelled")` included) before the commit leave the device byte-identical: the audio copied,
+//!   the folders made, the staged file and the host's `.openfader` folder are removed again (`export::Writer`). An existing
+//!   library is never modified in place.
+//! * **Read-back.** Before the switch the staged file passes `PRAGMA integrity_check` and is opened with this plugin's own
+//!   [`reader`]: the track count, the tracks of every list written (in order) and the cues, hot cues and loops of every track
+//!   that got performance data must be what was written, else the export fails and the old library stays.
+//!   `ExportReport::verified` is then `Some(true)`.
+//! * **Dry run** (`ExportOptions::dry_run`, `Feature::Plan`): the same planning code reads the device and the snapshot and
+//!   answers an `ExportPlan` (tracks to add or update by `Track.path`, audio bytes, an estimate of the library bytes, files,
+//!   what blocks the export); it writes nothing, not a folder. The existing `m.db` is opened read-only and `immutable` so
+//!   SQLite makes no `-wal`, `-shm` or journal and touches no time stamp; only a `-wal` a player left behind (changes
+//!   `immutable` would ignore) makes it read a copy in the system's temp folder.
+//! * **Room and size.** An export whose audio and library do not fit `ExportOptions::free` stops before anything is written,
+//!   with the sentence a dry run lists in `blocked`. A track over `ExportOptions::max_file`, or with a name FAT cannot hold
+//!   (`CON.wav`), is left out whole with a warning and a `blocked` line.
+//! * **Progress.** Phases "Copying audio", "Writing the library", "Checking the library" (this format has no analysis files: the
+//!   analysis lives in the database), bytes counted for the audio and the library file.
+//!
+//! # Checking a stick
+//!
+//! `device_check` (read-only, `immutable`, nothing recovered) answers the library `Engine Library` (present, readable, tracks,
+//! lists that are not folders, cues = hot cues, memory cues and loops read by [`reader`]) and these problems: unreadable
+//! (not a database, not an Engine library, unknown schema, the old two-file layout; severity Unreadable), `PRAGMA quick_check`
+//! findings (Error), audio files the library lists that the stick lacks (Error, `files`; no fix here, the host copies them again
+//! from the collection), `m.db.ofnew` without a journal (Info, fix `engine-dj:clean_leftovers`), `-wal`/`-shm` files older than
+//! `m.db` (Warning, fix `engine-dj:remove_sidecars`), a journal of this plugin (Warning, fix `engine-dj:finish_change` runs the
+//! recovery). The fixes only delete those files or run the recovery; none rewrites the library. [inferred: a `-wal` older than
+//! the database it sits next to is stale; SQLite itself ignores one whose salt does not match, the check is the cautious side.]
 //!
 //! # Format version: schema 3.0.0, or 2.18.0 for older Engine
 //!
@@ -74,6 +108,8 @@
 //! shares no code with it.
 
 pub mod blob;
+pub mod check;
+pub mod export;
 pub mod perf;
 pub mod playlists;
 pub mod reader;
@@ -82,14 +118,18 @@ pub mod schema_2;
 pub mod tracks;
 
 use openfader_plugin::library::{
-    audio_slot, host, place_audio, Choice, DeviceInfo, ExportOptions, ExportReport, Feature, Field,
+    ActionAnswer, CheckReport, Choice, DeviceInfo, ExportOptions, ExportReport, Feature, Field,
     FieldKind, LibraryPlugin, Probe, Scope, Snapshot, Source,
 };
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// Name of the library in [`DeviceInfo::libraries`] and the folder it lives in.
 const LIBRARY: &str = "Engine Library";
+
+/// The owner of this plugin's journal on a device.
+pub const OWNER: &str = "engine-dj";
 
 /// Key of the device option that picks the schema of a new library ([`schema::NEW`], as [`schema::text`]).
 pub const SCHEMA_OPTION: &str = "engine_dj.schema";
@@ -166,7 +206,7 @@ impl LibraryPlugin for Plugin {
                 vec![]
             },
             can_write: root.is_dir(),
-            features: vec![Feature::Export],
+            features: vec![Feature::Export, Feature::Plan, Feature::Check],
             modified,
             ..Default::default()
         })
@@ -178,156 +218,25 @@ impl LibraryPlugin for Plugin {
         options: &ExportOptions,
         _settings: &Value,
     ) -> Result<ExportReport, String> {
-        export(root, snapshot, options)
-    }
-}
-
-/// Megabytes, rounded up, for a message.
-fn mb(bytes: u64) -> u64 {
-    bytes.div_ceil(1 << 20)
-}
-
-/// `Err("cancelled")` when the user cancelled the job.
-fn tick(phase: &str, done: usize, total: usize) -> Result<(), String> {
-    if host::progress(phase, done, total) {
-        Err("cancelled".into())
-    } else {
-        Ok(())
-    }
-}
-
-fn export(
-    root: &Path,
-    snapshot: &Snapshot,
-    options: &ExportOptions,
-) -> Result<ExportReport, String> {
-    let db = database(root);
-    if root.join(LIBRARY).join("m.db").is_file() {
-        return Err(format!(
-            "{} holds an Engine library in the old two-file format; open it in Engine DJ once to convert it, nothing was changed",
-            root.join(LIBRARY).display()
-        ));
-    }
-    let want = match options.config.get(SCHEMA_OPTION) {
-        None => schema::CURRENT,
-        Some(v) => schema::parse_new(v)
-            .ok_or_else(|| format!("{SCHEMA_OPTION}: unknown schema {v:?}; use 3.0.0 or 2.18.0"))?,
-    };
-    let mut report = ExportReport::default();
-
-    // Where each track's audio goes, and whether it all fits before anything is copied.
-    let mut slots: Vec<Option<String>> = Vec::with_capacity(snapshot.tracks.len());
-    let mut need = 0u64;
-    for (t, _) in &snapshot.tracks {
-        slots.push(match audio_slot(root, t) {
-            Ok((rel, there)) => {
-                if !there {
-                    need += t
-                        .file
-                        .as_deref()
-                        .and_then(|f| std::fs::metadata(f).ok())
-                        .map_or(0, |m| m.len());
-                }
-                Some(rel)
-            }
-            Err(e) => {
-                report.warnings.push(format!("{}: skipped, {e}", t.title));
-                None
-            }
-        });
-    }
-    if let Some(free) = options.free.filter(|&f| need > f) {
-        return Err(format!(
-            "not enough space on the device: the new tracks need {} MB and {} MB are free",
-            mb(need),
-            mb(free)
-        ));
+        export::export(root, snapshot, options)
     }
 
-    let total = slots.iter().flatten().count();
-    let mut done = 0;
-    for (slot, (t, _)) in slots.iter_mut().zip(&snapshot.tracks) {
-        if slot.is_none() {
-            continue;
-        }
-        tick("Copying tracks", done, total)?;
-        done += 1;
-        match place_audio(root, t) {
-            Ok((rel, _)) => *slot = Some(rel),
-            Err(e) => {
-                report.warnings.push(format!("{}: skipped, {e}", t.title));
-                *slot = None;
-            }
-        }
+    fn device_check(
+        root: &Path,
+        _config: &BTreeMap<String, String>,
+        _settings: &Value,
+    ) -> Result<CheckReport, String> {
+        check::check(root)
     }
 
-    let mut staged = schema::stage(&db, want)?;
-    if staged.version != want && want != schema::CURRENT {
-        report.notes.push(format!(
-            "the library on the device has schema {}, so it was extended as it is; {} applies to a new library only",
-            schema::text(staged.version),
-            schema::text(want)
-        ));
+    fn device_fix(
+        root: &Path,
+        fix: &str,
+        _config: &BTreeMap<String, String>,
+        _settings: &Value,
+    ) -> Result<ActionAnswer, String> {
+        check::fix(root, fix)
     }
-    let edit_time = schema::has_edit_time(staged.version);
-    let tx = staged.conn.transaction().map_err(|e| e.to_string())?;
-    let uuid = staged.uuid.clone();
-    let db_err = |e: rusqlite::Error| format!("{}: {e}", db.display());
-    let mut ids: Vec<Option<i64>> = vec![None; snapshot.tracks.len()];
-    let (mut dropped, mut unanalysed) = (0, 0);
-    let total = slots.iter().flatten().count();
-    let mut done = 0;
-    for (i, ((t, a), slot)) in snapshot.tracks.iter().zip(&slots).enumerate() {
-        let Some(rel) = slot else { continue };
-        tick("Writing library", done, total)?;
-        done += 1;
-        let file = root.join(rel);
-        let rate = if t.sample_rate > 0 {
-            t.sample_rate
-        } else {
-            host::sample_rate(&file)
-        };
-        if rate == 0 && a.is_some() {
-            // The row below still goes in; only the performance data is skipped.
-            report.warnings.push(format!(
-                "{}: sample rate unknown, its cues, loops and grid were not written",
-                t.title
-            ));
-        }
-        let placed = tracks::Placed {
-            track: t,
-            analysis: a.as_ref(),
-            path: format!("../{rel}"),
-            file: &file,
-            rate,
-            edit_time,
-        };
-        let (id, w) = tracks::upsert(&tx, &uuid, &placed).map_err(db_err)?;
-        ids[i] = Some(id);
-        if w.added {
-            report.added += 1;
-        } else {
-            report.updated += 1;
-        }
-        dropped += w.dropped;
-        unanalysed += usize::from(w.added && !w.analyzed);
-    }
-    playlists::write(&tx, &uuid, snapshot, &ids).map_err(db_err)?;
-    tx.commit().map_err(db_err)?;
-    tick("Writing library", total, total)?;
-    staged.commit()?;
-
-    report.tracks = report.added + report.updated;
-    report.playlists = snapshot.playlists.len();
-    if dropped > 0 {
-        report.notes.push(format!("{dropped} cues or loops have no place in an Engine library (one main cue, 8 hot cues, 8 loops) and were left out"));
-    }
-    if unanalysed > 0 {
-        report.notes.push(format!(
-            "{unanalysed} new tracks have no waveform and grid: the players analyse them when loaded"
-        ));
-    }
-    Ok(report)
 }
 
 openfader_plugin::export_library!(Plugin);

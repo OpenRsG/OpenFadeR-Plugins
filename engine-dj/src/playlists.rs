@@ -11,7 +11,7 @@ use openfader_plugin::library::Snapshot;
 use rusqlite::{params, OptionalExtension, Transaction};
 
 /// A title as Engine accepts it: not empty, no `;` (its path separator).
-fn title(name: &str) -> String {
+pub(crate) fn title(name: &str) -> String {
     let t = name.replace(';', ",");
     let t = t.trim();
     if t.is_empty() {
@@ -44,7 +44,7 @@ pub fn write(
         let id = match found {
             Some(id) => {
                 tx.execute(
-                    "UPDATE Playlist SET lastEditTime = ?2 WHERE id = ?1",
+                    "UPDATE Playlist SET lastEditTime = ?2, isPersisted = 1 WHERE id = ?1",
                     params![id, now()],
                 )?;
                 id

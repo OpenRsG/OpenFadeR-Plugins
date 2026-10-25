@@ -293,7 +293,7 @@ fn space_and_list_limits_are_checked_up_front() {
         ..ExportOptions::default()
     };
     let e = export(&r.dev(), &full, &tight, None).unwrap_err();
-    assert!(e.contains("not enough space"), "{e}");
+    assert!(e.contains("Not enough space"), "{e}");
     assert_eq!(audio_files(&r.dev()), 0);
 
     let many = Snapshot {

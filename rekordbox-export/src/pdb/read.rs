@@ -37,8 +37,19 @@ pub fn open(root: &Path, config: &DeviceConfig) -> Result<(Db, Tags), String> {
     Ok((db, tags))
 }
 
-/// `export.pdb` bytes → [`Db`] (with the default [`DeviceConfig`]).
-fn parse(d: &[u8]) -> Result<Db, String> {
+/// `export.pdb` bytes → [`Db`] (with the default [`DeviceConfig`]). A file that stops before the last page of a table is an
+/// error, whatever tables are read.
+pub(crate) fn parse(d: &[u8]) -> Result<Db, String> {
+    let (page, tables) = (u32_at(d, 4)? as usize, u32_at(d, 8)? as usize);
+    for t in 0..tables {
+        let last = u32_at(d, 28 + 16 * t + 12)? as usize;
+        if page == 0 || d.len() / page <= last {
+            return Err(format!(
+                "pdb: truncated ({} bytes, a table ends at page {last})",
+                d.len()
+            ));
+        }
+    }
     let mut db = Db {
         tracks: tracks(d)?,
         nodes: nodes(d)?,
@@ -164,7 +175,7 @@ fn histories(d: &[u8]) -> Result<Vec<History>, String> {
 }
 
 /// `exportExt.pdb` bytes → MyTag categories, their tags and the `(track id, category, tag)` assignments.
-fn parse_tags(d: &[u8]) -> Result<Tags, String> {
+pub(crate) fn parse_tags(d: &[u8]) -> Result<Tags, String> {
     // Tag row (see `rows::tag`): category id (0 = this row is a category) u4 @12, position u4 @16, id u4 @20, name @0x1f.
     let (mut cats, mut tags): (Vec<(u32, u32, String)>, Vec<(u32, u32, u32, String)>) =
         Default::default();

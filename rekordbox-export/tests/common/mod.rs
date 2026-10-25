@@ -3,8 +3,8 @@
 #![allow(dead_code)] // each test binary uses a subset
 
 use openfader_plugin::library::{
-    Analysis, Beat, Buf, Cue, ExportOptions, ExportReport, Playlist, Snapshot, Track,
     host::{self, Host, HostRequest},
+    Analysis, Beat, Buf, Cue, ExportOptions, ExportReport, Playlist, Snapshot, Track,
 };
 use serde_json::{Value, json};
 use std::cell::Cell;
@@ -151,6 +151,8 @@ pub fn narrowed(snap: &Snapshot, ids: &[&str]) -> Snapshot {
 
 thread_local! {
     static CANCEL: Cell<bool> = const { Cell::new(false) };
+    static CANCEL_AT: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+    static SEEN: std::cell::RefCell<Vec<(String, u64, u64)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// The host's analysis of the audio ("computed"): a 120 BPM grid, a 3-band waveform and a key.
@@ -172,7 +174,16 @@ unsafe extern "C" fn call(req: *const u8, len: usize) -> Buf {
     let v: Value = match req {
         HostRequest::Analysis { computed: c, .. } => json!({ "analysis": c.then(computed) }),
         HostRequest::AudioInfo { .. } => json!({ "sample_rate": 44100 }),
-        HostRequest::Progress { .. } => json!({ "cancel": CANCEL.get() }),
+        HostRequest::Progress {
+            phase,
+            bytes_done,
+            bytes_total,
+            ..
+        } => {
+            let cancel = CANCEL.get() || CANCEL_AT.with(|c| c.borrow().as_deref() == Some(&phase));
+            SEEN.with(|s| s.borrow_mut().push((phase, bytes_done, bytes_total)));
+            json!({ "cancel": cancel })
+        }
     };
     let out = serde_json::to_vec(&v).unwrap().into_boxed_slice();
     let len = out.len();
@@ -191,12 +202,24 @@ unsafe extern "C" fn free(buf: Buf) {
 /// [`cancel`] was called on this thread.
 pub fn with_host<R>(f: impl FnOnce() -> R) -> R {
     CANCEL.set(false);
+    CANCEL_AT.with(|c| *c.borrow_mut() = None);
+    SEEN.with(|s| s.borrow_mut().clear());
     host::serving(&Host { call, free }, f)
 }
 
 /// The user cancels the job: every progress report of this thread answers so.
 pub fn cancel() {
     CANCEL.set(true);
+}
+
+/// The user cancels the job when it reports `phase`.
+pub fn cancel_at(phase: &str) {
+    CANCEL_AT.with(|c| *c.borrow_mut() = Some(phase.to_owned()));
+}
+
+/// `(phase, bytes_done, bytes_total)` of every progress report of the last job on this thread.
+pub fn reports() -> Vec<(String, u64, u64)> {
+    SEEN.with(|s| s.borrow().clone())
 }
 
 /// The plugin's settings holding `key` as the OneLibrary key (`None`: no setting, so the built-in key).
@@ -212,4 +235,40 @@ pub fn export(
     key: Option<&str>,
 ) -> Result<ExportReport, String> {
     with_host(|| rekordbox_export::export(root, snap, options, &settings(key)))
+}
+
+/// Panics unless the host would show `text` in every language of the plugin's `locales/` (the rule of the host's `locale.rs`: the
+/// text itself is a key, or matches a key whose `{}` stand for values of at least one character).
+pub fn assert_translated(text: &str) {
+    fn matches(key: &str, text: &str) -> bool {
+        let parts: Vec<&str> = key.split("{}").collect();
+        let (first, rest) = parts.split_first().unwrap();
+        let Some((last, middle)) = rest.split_last() else {
+            return false;
+        };
+        let Some(mut s) = text.strip_prefix(first).and_then(|t| t.strip_suffix(last)) else {
+            return false;
+        };
+        for part in middle {
+            let start = s.char_indices().nth(1).map_or(s.len(), |(i, _)| i);
+            match s.get(start..).and_then(|r| r.find(part)) {
+                Some(i) => s = &s[start + i + part.len()..],
+                None => return false,
+            }
+        }
+        !s.is_empty()
+    }
+    for lang in ["de", "es", "fr", "it", "nl", "pt"] {
+        let file = format!(
+            "{}/../rekordbox-device/locales/{lang}.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let map: std::collections::HashMap<String, String> =
+            serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+        let found = map.get(text).is_some_and(|t| !t.is_empty())
+            || map
+                .iter()
+                .any(|(k, v)| !v.is_empty() && k.contains("{}") && matches(k, text));
+        assert!(found, "{lang} has no translation of: {text}");
+    }
 }

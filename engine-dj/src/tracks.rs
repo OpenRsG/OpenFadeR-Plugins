@@ -207,3 +207,21 @@ fn performance(
     )?;
     Ok(w)
 }
+
+/// Whether a new row for this track gets a waveform and a grid of its own: what `performance` leaves in `isAnalyzed`.
+pub fn has_analysis(a: Option<&Analysis>, length_s: i64, rate: u32) -> bool {
+    let total = length_s.max(0) * i64::from(rate);
+    a.filter(|_| rate > 0 && total > 0).is_some_and(|a| {
+        let rate = f64::from(rate);
+        !perf::markers(&a.beats, rate, total as f64).is_empty()
+            && perf::overview(&a.three_band_preview, total, rate).is_some()
+    })
+}
+
+/// How many cues, hot cues and loops a reader finds again in the performance data written for `a` at `rate`.
+pub fn expected_cues(a: &Analysis, rate: u32) -> usize {
+    let rate = f64::from(rate);
+    let (slots, main, _) = perf::quick_cues(&a.cues, rate);
+    let (loops, _) = perf::loops(&a.cues, rate);
+    perf::cues_from(&slots, main, &loops, rate).len()
+}

@@ -9,9 +9,14 @@ use crate::settings::browse::COLUMNS;
 /// Longest string we write (characters); keeps a track row far below one page.
 const MAX_CHARS: usize = 255;
 
+/// `s` cut to the characters [`string`] writes (what a read-back of it gives).
+pub fn clip(s: &str) -> &str {
+    &s[..s.char_indices().nth(MAX_CHARS).map_or(s.len(), |(i, _)| i)]
+}
+
 /// DeviceSQL string: short ASCII (`(len+1)<<1|1`), long ASCII `0x40`, anything else UTF-16LE `0x90`.
 pub fn string(out: &mut Vec<u8>, s: &str) {
-    let s = &s[..s.char_indices().nth(MAX_CHARS).map_or(s.len(), |(i, _)| i)];
+    let s = clip(s);
     if s.is_ascii() && s.len() < 127 {
         out.push(((s.len() + 1) << 1 | 1) as u8);
         out.extend(s.as_bytes());
