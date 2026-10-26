@@ -10,7 +10,7 @@
 
 Plugins for [OpenFadeR](https://github.com/OpenRsG/OpenFadeR), the open-source DJ app: libraries, devices, effects, pad and knob modes, events and track sources. One folder per plugin, each with its `plugin.json`. Native plugins are Rust crates, the rest are JSON or Python.
 
-The rekordbox extensions (`rekordbox-device`, `rekordbox-xml`, `rekordbox-db`) are not here: they are built into the app (`crates/rekordbox-*` of the core repository), always on, with nothing to install. `itunes` and `sample-pack` still use the helpers of `crates/rekordbox-common`.
+OpenFadeR's built-in compatibility adapters (`rekordbox-device`, `rekordbox-xml`, `rekordbox-db` at runtime) live in `compatibility/rekordbox/` of the core repository, always on, with nothing to install. The `itunes` and `sample-pack` plugins share helpers from its `compat-rekordbox-common` package; the Engine DJ, Serato, Traktor, VirtualDJ and Mixxx integrations remain here.
 
 ## Install in one click
 
@@ -48,7 +48,7 @@ The device plugins here and the app's built-in rekordbox extension write side by
 
 ## Build from source
 
-The native plugins form one Cargo workspace built against the SDK and the `rekordbox-common` crate of the core repository, found at `../../sdk` and `../../crates/rekordbox-common`. Check this repository out as `extension/plugin/` inside a core checkout (the core's `start.sh` does it), then:
+The native plugins form one Cargo workspace built against the core SDK and `compat-rekordbox-common`, found at `../../sdk` and `../../compatibility/rekordbox/common`. This companion's `v0.2.7` tag pairs with core 0.2.7; older core checkouts use their matching companion revision. Check this repository out as `extension/plugin/` inside a core checkout (`start.sh` clones the matching tag on first use), then:
 
 ```sh
 ./build.sh        # cargo build --release, then each library is copied next to its plugin.json

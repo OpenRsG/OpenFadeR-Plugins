@@ -13,7 +13,7 @@
 use openfader_plugin::library::{
     playlist_tree, LibraryPlugin, Playlist, PlaylistRow, Probe, Source, Track,
 };
-use rekordbox_common::{at, location, path_map, tags, Edge, PathMap, Tag};
+use compat_rekordbox_common::{at, location, path_map, tags, Edge, PathMap, Tag};
 use serde_json::Value as Json;
 use std::collections::HashMap;
 use std::io::Read;

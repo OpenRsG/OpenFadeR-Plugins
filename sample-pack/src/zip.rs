@@ -3,7 +3,7 @@
 //! ponytail: sizes and offsets are `u32`, so an archive over 4 GiB is not supported.
 
 use flate2::{Crc, read::DeflateDecoder};
-use rekordbox_common::at;
+use compat_rekordbox_common::at;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;

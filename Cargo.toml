@@ -4,8 +4,8 @@ members = ["itunes", "sample-pack", "engine-dj", "serato", "virtualdj", "traktor
 
 [workspace.dependencies]
 openfader-plugin = { path = "../../sdk", features = ["library"] }
-# Part of the app now (the rekordbox extensions are built into it); itunes and sample-pack still share its helpers.
-rekordbox-common = { path = "../../crates/rekordbox-common" }
+# The built-in compatibility adapters share helpers with itunes and sample-pack.
+compat-rekordbox-common = { path = "../../compatibility/rekordbox/common" }
 serde_json = "1"
 # Each database plugin carries its own SQLCipher (the app links its own copy, for the rekordbox extensions).
 rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
