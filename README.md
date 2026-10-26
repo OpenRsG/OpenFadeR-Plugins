@@ -38,6 +38,7 @@ In OpenFadeR open PREFERENCES > EXTENSIONS > GET PLUGINS. This repository is in 
 
 - **All or nothing.** One export is one `Commit` of the SDK: the library files (Engine DJ `m.db`; Serato `database V2` and every crate; Traktor `collection.nml`; VirtualDJ `database.xml` and its list files) are staged beside their targets as `*.ofnew`, flushed, read back, then switched in one journalled step (`/.openfader/journal.json`). Pulled out at any point, the stick holds the old library or the new one, never a mix; the next write finishes or rolls back an interrupted switch first. A cancel or an error removes every file and folder the run made and leaves the stick byte-identical (Serato's tag edits of audio that was already there are put back).
 - **Read back before it counts.** The staged library is read again with the plugin's own reader (tracks, playlists and their entries, cues and loops where the format holds them). A difference stops the export with a plain sentence, the old library stays, and a clean export reports `verified`.
+- VirtualDJ readback uses an exclusively created private scratch directory, so concurrent exports do not overwrite or remove each other's verification files.
 - **Dry run.** An export with `dry_run` writes nothing (not a folder, not a temp file) and returns the plan from the code the real export uses: tracks to add or update, bytes to copy and write, files, and what is blocked (no room, a file over the file system's limit, a name the stick cannot hold, a library that cannot be read).
 - **Check and fix.** `device_check` reads a stick without writing and lists problems with cause, consequence and action: library unreadable, audio listed but missing (the host copies it again from the collection), leftovers of an interrupted write, and per format (Engine DJ: `PRAGMA quick_check`, stale `-wal`/`-shm` files). `device_fix` cleans leftovers through the same journal. None of these formats keeps a backup copy on a stick, so an unreadable library has no plugin fix.
 - **Players.** Serato, Traktor and VirtualDJ are read by software on a computer, not by players, so they ship no `players.json`. `engine-dj/players.json` lists the Denon DJ models the repository documents as reading an Engine library, all `to_measure`: file systems and firmware are not measured yet.
@@ -48,7 +49,7 @@ The device plugins here and the app's built-in rekordbox extension write side by
 
 ## Build from source
 
-The native plugins form one Cargo workspace built against the core SDK and `compat-rekordbox-common`, found at `../../sdk` and `../../compatibility/rekordbox/common`. This companion's `v0.2.7` tag pairs with core 0.2.7; older core checkouts use their matching companion revision. Check this repository out as `extension/plugin/` inside a core checkout (`start.sh` clones the matching tag on first use), then:
+The native plugins form one Cargo workspace built against the core SDK and `compat-rekordbox-common`, found at `../../sdk` and `../../compatibility/rekordbox/common`. This companion's `v0.2.8` tag pairs with core 0.2.7; older core checkouts use their matching companion revision. Check this repository out as `extension/plugin/` inside a core checkout (`start.sh` clones the matching tag on first use), then:
 
 ```sh
 ./build.sh        # cargo build --release, then each library is copied next to its plugin.json
