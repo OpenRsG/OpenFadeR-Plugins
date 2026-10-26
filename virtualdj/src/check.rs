@@ -16,29 +16,17 @@ fn bad(detail: &str) -> String {
     )
 }
 
-/// A scratch folder in the computer's temporary folder, removed on drop.
-struct Scratch(PathBuf);
-
-impl Drop for Scratch {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
-}
-
 /// Reads the staged files of `commit` back with [`Reader`] (from a scratch copy that has the layout of the stick) and compares
 /// what it finds with what the export put in them: songs, cues and loops per song, lists and the songs of each list.
 pub(crate) fn verify(root: &Path, commit: &Commit, want: &Composed) -> Result<(), String> {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos());
-    let tmp = Scratch(std::env::temp_dir().join(format!(
-        "openfader-virtualdj-{}-{nanos}",
-        std::process::id()
-    )));
+    let tmp = tempfile::Builder::new()
+        .prefix("openfader-virtualdj-")
+        .tempdir()
+        .map_err(|e| bad(&e.to_string()))?;
     let mut have_db = false;
     for (target, staged) in commit.staged() {
         let rel = target.strip_prefix(root).unwrap_or(target);
-        let to = tmp.0.join(rel);
+        let to = tmp.path().join(rel);
         if let Some(dir) = to.parent() {
             std::fs::create_dir_all(dir).map_err(|e| bad(&e.to_string()))?;
         }
@@ -46,15 +34,15 @@ pub(crate) fn verify(root: &Path, commit: &Commit, want: &Composed) -> Result<()
         have_db |= target == root.join(DATABASE);
     }
     if !have_db {
-        let to = tmp.0.join(DATABASE);
+        let to = tmp.path().join(DATABASE);
         let stub = format!(
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<{ROOT} Version=\"8.5\">\n</{ROOT}>\n"
         );
-        std::fs::create_dir_all(to.parent().unwrap_or(&tmp.0))
+        std::fs::create_dir_all(to.parent().unwrap_or(tmp.path()))
             .and_then(|()| std::fs::write(&to, stub))
             .map_err(|e| bad(&e.to_string()))?;
     }
-    let r = Reader::open(&tmp.0).map_err(|e| bad(&e))?;
+    let r = Reader::open(tmp.path()).map_err(|e| bad(&e))?;
     if have_db && r.song_count() != want.songs {
         return Err(bad(&format!(
             "{} songs instead of {}",
@@ -77,7 +65,7 @@ pub(crate) fn verify(root: &Path, commit: &Commit, want: &Composed) -> Result<()
         )));
     }
     for (file, n) in &want.lists {
-        let there = tmp.0.join(file.strip_prefix(root).unwrap_or(file));
+        let there = tmp.path().join(file.strip_prefix(root).unwrap_or(file));
         let id = r
             .list_files()
             .find(|(_, f)| *f == there)

@@ -12,7 +12,7 @@ mod zip;
 
 use openfader_plugin::library::{LibraryPlugin, Playlist, Probe, Source, Track};
 use pack::{List, Pack};
-use rekordbox_common::at;
+use compat_rekordbox_common::at;
 use serde_json::Value;
 use std::fs::File;
 use std::path::{Component, Path, PathBuf};

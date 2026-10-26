@@ -166,6 +166,26 @@ fn a_cancel_leaves_the_stick_byte_identical() {
 }
 
 #[test]
+fn concurrent_exports_verify_their_own_library_and_keep_other_sticks_intact() {
+    let start = std::sync::Arc::new(std::sync::Barrier::new(8));
+    std::thread::scope(|scope| {
+        for i in 0..8 {
+            let start = start.clone();
+            scope.spawn(move || {
+                let src = Dir::new(&format!("parallel-src-{i}"));
+                let stick = Dir::new(&format!("parallel-stick-{i}"));
+                let first = snapshot(&src);
+                let next = bigger(&src);
+                start.wait();
+                export(&stick.0, &first, &Default::default()).unwrap();
+                export(&stick.0, &next, &Default::default()).unwrap();
+                whole(&stick.0, 3, 3);
+            });
+        }
+    });
+}
+
+#[test]
 fn a_dry_run_touches_nothing_and_matches_the_real_export() {
     let src = Dir::new("dry-src");
     let stick = Dir::new("dry-stick");

@@ -1,6 +1,6 @@
 {
   "name": "virtualdj",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "VirtualDJ database: read the desktop library (database.xml with its lists), and export a collection with its cues, loops, grids and playlists to a drive's own VirtualDJ/database.xml.",
   "library": {
     "lib": {
