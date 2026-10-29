@@ -2,7 +2,7 @@
 //! `<LIST id name attr seq>` holding `<TRACK key=id/>`. A list with tracks is a playlist, one without a folder (inferred from
 //! the one pack seen; `attr` is ignored).
 
-use compat_rekordbox_common::{Edge, tags};
+use openfader_plugin::markup::{Edge, tags};
 
 /// One `<TRACK>` of the pack.
 #[derive(Debug, PartialEq)]
