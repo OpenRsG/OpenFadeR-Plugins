@@ -48,7 +48,7 @@ The device plugins here and the app's built-in Rekordbox and Traktor adapters wr
 
 ## Build from source
 
-The native plugins form one Cargo workspace built against the core SDK and `compat-rekordbox-common`, found at `../../sdk` and `../../compatibility/rekordbox/common`. This companion's `v0.2.10` tag pairs with core 0.2.8 and uses the SDK's shared `markup` API. Use companion `v0.2.8` with core 0.2.7; older core checkouts use their matching companion revision. Check this repository out as `extension/plugin/` inside a core checkout (`start.sh` clones the matching tag on first use), then:
+The native plugins form one Cargo workspace built against the core SDK and `compat-rekordbox-common`, found at `../../sdk` and `../../compatibility/rekordbox/common`. This companion's `v0.2.11` tag pairs with core 0.2.8 and uses the SDK's shared `markup` API. Use companion `v0.2.8` with core 0.2.7; older core checkouts use their matching companion revision. Check this repository out as `extension/plugin/` inside a core checkout (`start.sh` clones the matching tag on first use), then:
 
 ```sh
 ./build.sh        # cargo build --release, then each library is copied next to its plugin.json
