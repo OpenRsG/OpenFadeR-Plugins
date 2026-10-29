@@ -11,7 +11,7 @@ dist = root / "dist"
 dist.mkdir(exist_ok=True)
 for manifest in sorted(root.glob("*/plugin.json")):
     m = json.loads(manifest.read_text())
-    lib = (m.get("library") or {}).get("lib")
+    lib = (m.get("library") or m.get("controller") or {}).get("lib")
     lib = lib.get(OS) if isinstance(lib, dict) else lib
     if not lib:
         continue
