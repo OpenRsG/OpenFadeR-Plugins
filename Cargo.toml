@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["itunes", "sample-pack", "engine-dj", "serato", "virtualdj", "traktor", "mixxx"]
+members = ["itunes", "sample-pack", "engine-dj", "serato", "virtualdj", "mixxx"]
 
 [workspace.dependencies]
 openfader-plugin = { path = "../../sdk", features = ["library"] }
