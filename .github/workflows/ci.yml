@@ -18,6 +18,7 @@ on:
 env:
   CARGO_BUILD_JOBS: "1"
   CARGO_PROFILE_RELEASE_STRIP: symbols
+  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C target-cpu=cortex-a53 -C target-feature=-aes,-sha2"
 
 jobs:
   test:
@@ -81,6 +82,22 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y crossbuild-essential-arm64
+      - name: Verify Pi instruction baseline
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          python - <<'PY'
+          import os
+          import shlex
+          import subprocess
+
+          flags = shlex.split(os.environ["CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS"])
+          features = set(subprocess.check_output(
+              ["rustc", "--print", "cfg", "--target", "aarch64-unknown-linux-gnu", *flags],
+              text=True,
+          ).splitlines())
+          unsupported = features & {'target_feature="aes"', 'target_feature="sha2"'}
+          assert not unsupported, f"Pi 3/4 do not support {sorted(unsupported)}"
+          PY
       - name: OpenSSL build tools (Windows)
         if: matrix.os == 'windows-latest'
         run: |
@@ -91,7 +108,6 @@ jobs:
           CARGO_BUILD_TARGET: ${{ matrix.target }}
           CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS: "-C target-cpu=apple-m1"
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C target-cpu=cortex-a53"
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
           CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
           AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
