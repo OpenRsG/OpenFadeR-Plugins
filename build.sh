@@ -11,8 +11,8 @@ MINGW* | MSYS* | CYGWIN*) os=windows ;;
 *) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
 esac
 if [ "$os" = windows ]; then
-	# The SQLCipher plugins build OpenSSL from source: with Git Bash's own perl (too few modules) that fails, so use Strawberry Perl
-	# (on the GitHub runners) and NASM when they are there.
+	# sample-pack links SQLCipher through the core's compat-rekordbox-common, which builds OpenSSL from source: with Git Bash's
+	# own perl (too few modules) that fails, so use Strawberry Perl (on the GitHub runners) and NASM when they are there.
 	[ -x /c/Strawberry/perl/bin/perl.exe ] && export OPENSSL_SRC_PERL=C:/Strawberry/perl/bin/perl.exe
 	[ -d "/c/Program Files/NASM" ] && PATH="$PATH:/c/Program Files/NASM"
 fi
