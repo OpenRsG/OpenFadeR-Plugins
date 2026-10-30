@@ -1,15 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["itunes", "sample-pack", "engine-dj", "serato", "virtualdj", "mixxx"]
+members = ["sample-pack", "mixxx"]
 
 [workspace.dependencies]
 openfader-plugin = { path = "../../sdk", features = ["library"] }
-# The built-in compatibility adapters share helpers with itunes and sample-pack.
+# The built-in compatibility adapters share helpers with sample-pack.
 compat-rekordbox-common = { path = "../../compatibility/rekordbox/common" }
 serde_json = "1"
-# Each database plugin carries its own SQLCipher (the app links its own copy, for the rekordbox extensions).
-rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 [profile.release]
 opt-level = 3

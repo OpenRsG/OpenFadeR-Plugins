@@ -98,11 +98,6 @@ jobs:
           unsupported = features & {'target_feature="aes"', 'target_feature="sha2"'}
           assert not unsupported, f"Pi 3/4 do not support {sorted(unsupported)}"
           PY
-      - name: OpenSSL build tools (Windows)
-        if: matrix.os == 'windows-latest'
-        run: |
-          echo "OPENSSL_SRC_PERL=C:/Strawberry/perl/bin/perl.exe" >> "$GITHUB_ENV"
-          echo "C:\Program Files\NASM" >> "$GITHUB_PATH"
       - run: core/extension/plugin/build.sh
         env:
           CARGO_BUILD_TARGET: ${{ matrix.target }}
